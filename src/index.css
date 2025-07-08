@@ -2,41 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Planix Design System - Futuristic Data Analytics Theme */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Base colors - Dark theme with neon accents */
+    --background: 250 30% 8%;
+    --foreground: 240 10% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 250 25% 12%;
+    --card-foreground: 240 10% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 250 25% 12%;
+    --popover-foreground: 240 10% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Electric Blue */
+    --primary: 220 100% 60%;
+    --primary-foreground: 250 30% 8%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Neon Purple */
+    --secondary: 280 100% 70%;
+    --secondary-foreground: 250 30% 8%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Subtle grays */
+    --muted: 250 20% 15%;
+    --muted-foreground: 240 5% 65%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Bright Cyan */
+    --accent: 190 100% 60%;
+    --accent-foreground: 250 30% 8%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Neon Red */
+    --destructive: 0 100% 60%;
+    --destructive-foreground: 240 10% 95%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders and inputs */
+    --border: 250 20% 20%;
+    --input: 250 20% 18%;
+    --ring: 220 100% 60%;
 
-    --radius: 0.5rem;
+    /* Success - Neon Green */
+    --success: 120 100% 50%;
+    --success-foreground: 250 30% 8%;
+
+    /* Warning - Neon Orange */
+    --warning: 30 100% 60%;
+    --warning-foreground: 250 30% 8%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(220 100% 60%), hsl(280 100% 70%));
+    --gradient-secondary: linear-gradient(135deg, hsl(280 100% 70%), hsl(320 100% 60%));
+    --gradient-accent: linear-gradient(135deg, hsl(190 100% 60%), hsl(220 100% 60%));
+    --gradient-background: linear-gradient(135deg, hsl(250 30% 8%), hsl(260 40% 12%));
+
+    /* Shadows with glow effects */
+    --shadow-glow: 0 0 30px hsl(220 100% 60% / 0.3);
+    --shadow-glow-secondary: 0 0 30px hsl(280 100% 70% / 0.3);
+    --shadow-glow-accent: 0 0 30px hsl(190 100% 60% / 0.3);
+
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
 
@@ -55,42 +79,33 @@ All colors MUST be HSL.
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  .light {
+    /* Light theme (optional) */
+    --background: 240 10% 96%;
+    --foreground: 250 30% 8%;
+    --card: 240 10% 100%;
+    --card-foreground: 250 30% 8%;
+    --primary: 220 100% 50%;
+    --primary-foreground: 240 10% 96%;
+    --secondary: 280 100% 60%;
+    --secondary-foreground: 240 10% 96%;
+    --muted: 240 5% 90%;
+    --muted-foreground: 240 5% 40%;
+    --accent: 190 100% 50%;
+    --accent-foreground: 240 10% 96%;
+    --border: 240 5% 85%;
+    --input: 240 5% 88%;
+    --ring: 220 100% 50%;
+    
+    /* Sidebar colors */
+    --sidebar-background: 240 10% 98%;
+    --sidebar-foreground: 250 30% 8%;
+    --sidebar-primary: 220 100% 50%;
+    --sidebar-primary-foreground: 240 10% 96%;
+    --sidebar-accent: 240 5% 92%;
+    --sidebar-accent-foreground: 250 30% 8%;
+    --sidebar-border: 240 5% 85%;
+    --sidebar-ring: 220 100% 50%;
   }
 }
 
@@ -101,5 +116,84 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    background: var(--gradient-background);
+    min-height: 100vh;
+  }
+
+  /* Custom animations */
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: var(--shadow-glow); }
+    50% { box-shadow: var(--shadow-glow), 0 0 50px hsl(220 100% 60% / 0.5); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+}
+
+@layer components {
+  /* Glass morphism effect */
+  .glass {
+    @apply backdrop-blur-xl bg-card/30 border border-border/50;
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glow-secondary {
+    box-shadow: var(--shadow-glow-secondary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: var(--gradient-primary);
+    border-radius: var(--radius);
+    padding: 2px;
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    background: hsl(var(--card));
+    border-radius: calc(var(--radius) - 2px);
+  }
+
+  /* Floating animation */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--accent) / 0.3),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
   }
 }
