@@ -5,15 +5,26 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, User, BarChart3, Zap } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [loginData, setLoginData] = useState({ email: '', password: '' });
+  const [registerData, setRegisterData] = useState({ name: '', email: '', password: '' });
+  const { signIn, signUp } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    // TODO: Implementar autenticação com Supabase
-    setTimeout(() => setIsLoading(false), 2000);
+    await signIn(loginData.email, loginData.password);
+    setIsLoading(false);
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    await signUp(registerData.email, registerData.password, registerData.name);
+    setIsLoading(false);
   };
 
   return (
@@ -57,7 +68,7 @@ export function AuthPage() {
               </TabsList>
               
               <TabsContent value="login">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleLogin} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <div className="relative">
@@ -67,6 +78,8 @@ export function AuthPage() {
                         type="email"
                         placeholder="seu@email.com"
                         className="pl-10"
+                        value={loginData.email}
+                        onChange={(e) => setLoginData(prev => ({ ...prev, email: e.target.value }))}
                         required
                       />
                     </div>
@@ -81,6 +94,8 @@ export function AuthPage() {
                         type="password"
                         placeholder="••••••••"
                         className="pl-10"
+                        value={loginData.password}
+                        onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
                         required
                       />
                     </div>
@@ -97,7 +112,7 @@ export function AuthPage() {
               </TabsContent>
               
               <TabsContent value="register">
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome</Label>
                     <div className="relative">
@@ -107,6 +122,8 @@ export function AuthPage() {
                         type="text"
                         placeholder="Seu nome"
                         className="pl-10"
+                        value={registerData.name}
+                        onChange={(e) => setRegisterData(prev => ({ ...prev, name: e.target.value }))}
                         required
                       />
                     </div>
@@ -121,6 +138,8 @@ export function AuthPage() {
                         type="email"
                         placeholder="seu@email.com"
                         className="pl-10"
+                        value={registerData.email}
+                        onChange={(e) => setRegisterData(prev => ({ ...prev, email: e.target.value }))}
                         required
                       />
                     </div>
@@ -135,6 +154,8 @@ export function AuthPage() {
                         type="password"
                         placeholder="••••••••"
                         className="pl-10"
+                        value={registerData.password}
+                        onChange={(e) => setRegisterData(prev => ({ ...prev, password: e.target.value }))}
                         required
                       />
                     </div>

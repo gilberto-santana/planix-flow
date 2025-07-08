@@ -5,6 +5,7 @@ import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
 import { BarChart3, FileSpreadsheet, User, LogOut, Zap, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
 
 interface DashboardData {
   fileName: string;
@@ -19,6 +20,7 @@ interface DashboardData {
 }
 
 export function Dashboard() {
+  const { user, signOut } = useAuth();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [currentSheet, setCurrentSheet] = useState(0);
 
@@ -59,8 +61,7 @@ export function Dashboard() {
   };
 
   const handleLogout = () => {
-    // TODO: Implementar logout com Supabase
-    console.log("Logout");
+    signOut();
   };
 
   return (
@@ -83,7 +84,7 @@ export function Dashboard() {
             </Badge>
             <Button variant="ghost" size="sm" className="gap-2">
               <User className="h-4 w-4" />
-              Usuário
+              {user?.email?.split('@')[0] || 'Usuário'}
             </Button>
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="h-4 w-4" />

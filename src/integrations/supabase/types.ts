@@ -14,7 +14,192 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      charts: {
+        Row: {
+          chart_config: Json
+          chart_type: string
+          created_at: string
+          data_config: Json
+          id: string
+          sheet_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          chart_config: Json
+          chart_type: string
+          created_at?: string
+          data_config: Json
+          id?: string
+          sheet_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          chart_config?: Json
+          chart_type?: string
+          created_at?: string
+          data_config?: Json
+          id?: string
+          sheet_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charts_sheet_id_fkey"
+            columns: ["sheet_id"]
+            isOneToOne: false
+            referencedRelation: "sheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      sheets: {
+        Row: {
+          column_count: number | null
+          created_at: string
+          id: string
+          row_count: number | null
+          sheet_index: number
+          sheet_name: string
+          spreadsheet_id: string
+        }
+        Insert: {
+          column_count?: number | null
+          created_at?: string
+          id?: string
+          row_count?: number | null
+          sheet_index: number
+          sheet_name: string
+          spreadsheet_id: string
+        }
+        Update: {
+          column_count?: number | null
+          created_at?: string
+          id?: string
+          row_count?: number | null
+          sheet_index?: number
+          sheet_name?: string
+          spreadsheet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sheets_spreadsheet_id_fkey"
+            columns: ["spreadsheet_id"]
+            isOneToOne: false
+            referencedRelation: "spreadsheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spreadsheet_data: {
+        Row: {
+          cell_value: string | null
+          column_index: number
+          column_name: string | null
+          created_at: string
+          data_type: string | null
+          id: string
+          row_index: number
+          sheet_id: string
+        }
+        Insert: {
+          cell_value?: string | null
+          column_index: number
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_index: number
+          sheet_id: string
+        }
+        Update: {
+          cell_value?: string | null
+          column_index?: number
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_index?: number
+          sheet_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spreadsheet_data_sheet_id_fkey"
+            columns: ["sheet_id"]
+            isOneToOne: false
+            referencedRelation: "sheets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spreadsheets: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id: string
+          processing_status: string
+          sheet_count: number | null
+          updated_at: string
+          upload_status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id?: string
+          processing_status?: string
+          sheet_count?: number | null
+          updated_at?: string
+          upload_status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          processing_status?: string
+          sheet_count?: number | null
+          updated_at?: string
+          upload_status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
