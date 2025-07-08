@@ -1,154 +1,124 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.50.3";
+// supabase/functions/process-spreadsheet/index.ts
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
-// File validation constants
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_MIME_TYPES = [
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'text/csv'
-];
-const ALLOWED_EXTENSIONS = ['.xls', '.xlsx', '.csv'];
-
-interface FileUploadRequest {
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-}
-
-function sanitizeFileName(fileName: string): string {
-  // Remove path traversal attempts and dangerous characters
-  return fileName
-    .replace(/[\/\\:*?"<>|]/g, '_')
-    .replace(/\.+/g, '.')
-    .replace(/^\./, '')
-    .trim();
-}
-
-function validateFile(fileName: string, fileSize: number, fileType: string): { valid: boolean; error?: string } {
-  // Size validation
-  if (fileSize > MAX_FILE_SIZE) {
-    return { valid: false, error: 'File size exceeds 10MB limit' };
-  }
-
-  // MIME type validation
-  if (!ALLOWED_MIME_TYPES.includes(fileType)) {
-    return { valid: false, error: 'Invalid file type. Only .xls, .xlsx, and .csv files are allowed' };
-  }
-
-  // Extension validation
-  const hasValidExtension = ALLOWED_EXTENSIONS.some(ext => 
-    fileName.toLowerCase().endsWith(ext)
-  );
-  
-  if (!hasValidExtension) {
-    return { valid: false, error: 'Invalid file extension. Only .xls, .xlsx, and .csv files are allowed' };
-  }
-
-  // Additional security checks
-  if (fileName.includes('..') || fileName.includes('/') || fileName.includes('\\')) {
-    return { valid: false, error: 'Invalid file name' };
-  }
-
-  return { valid: true };
-}
-
-const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-
+serve(async (req) => {
   try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
 
-    // Get user from auth header
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      throw new Error('Missing authorization header');
+    const { type, record } = await req.json();
+
+    if (type !== "INSERT" || !record?.name || !record?.bucket_id) {
+      return new Response(JSON.stringify({ error: "Invalid event payload" }), {
+        status: 400,
+      });
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    const filePath = record.name;
+    const bucket = record.bucket_id;
+    const userId = filePath.split("/")[0];
 
-    if (authError || !user) {
-      throw new Error('Invalid authentication');
+    // Baixar o arquivo do Storage
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from(bucket)
+      .download(filePath);
+
+    if (downloadError || !fileData) {
+      return new Response(JSON.stringify({ error: "Failed to download file", details: downloadError }), {
+        status: 500,
+      });
     }
 
-    const { fileName, fileSize, fileType }: FileUploadRequest = await req.json();
+    const arrayBuffer = await fileData.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
-    console.log(`Processing file upload request for user ${user.id}: ${fileName}`);
-
-    // Validate file
-    const validation = validateFile(fileName, fileSize, fileType);
-    if (!validation.valid) {
-      console.error(`File validation failed: ${validation.error}`);
-      return new Response(
-        JSON.stringify({ error: validation.error }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        }
-      );
-    }
-
-    // Sanitize file name
-    const sanitizedFileName = sanitizeFileName(fileName);
-    const filePath = `${user.id}/${Date.now()}_${sanitizedFileName}`;
-
-    // Insert spreadsheet record
-    const { data: spreadsheet, error: insertError } = await supabase
-      .from('spreadsheets')
+    // Inserir metadata na tabela spreadsheets
+    const { data: spreadsheet, error: spreadsheetError } = await supabase
+      .from("spreadsheets")
       .insert({
-        user_id: user.id,
-        file_name: sanitizedFileName,
+        user_id: userId,
+        file_name: filePath.split("/").pop(),
         file_path: filePath,
-        file_size: fileSize,
-        file_type: fileType,
-        upload_status: 'uploaded',
-        processing_status: 'pending'
+        file_size: arrayBuffer.byteLength,
+        file_type: record.metadata?.mimetype || "unknown",
+        sheet_count: workbook.SheetNames.length,
+        upload_status: "uploaded",
+        processing_status: "parsed"
       })
       .select()
       .single();
 
-    if (insertError) {
-      console.error('Failed to insert spreadsheet record:', insertError);
-      throw insertError;
+    if (spreadsheetError || !spreadsheet) {
+      return new Response(JSON.stringify({ error: "Failed to insert spreadsheet metadata", details: spreadsheetError }), {
+        status: 500,
+      });
     }
 
-    console.log(`Spreadsheet record created successfully: ${spreadsheet.id}`);
+    for (let i = 0; i < workbook.SheetNames.length; i++) {
+      const sheetName = workbook.SheetNames[i];
+      const sheet = workbook.Sheets[sheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
 
-    return new Response(
-      JSON.stringify({
-        spreadsheetId: spreadsheet.id,
-        filePath: filePath,
-        message: 'File processed successfully'
-      }),
-      {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      }
-    );
+      const columnCount = json[0]?.length || 0;
+      const rowCount = json.length;
 
-  } catch (error: any) {
-    console.error('Error in process-spreadsheet function:', error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      // Criar registro da aba
+      const { data: sheetRow, error: sheetInsertError } = await supabase
+        .from("sheets")
+        .insert({
+          spreadsheet_id: spreadsheet.id,
+          sheet_name: sheetName,
+          sheet_index: i,
+          column_count: columnCount,
+          row_count: rowCount,
+        })
+        .select()
+        .single();
+
+      if (sheetInsertError || !sheetRow) {
+        console.error("Erro ao criar sheet:", sheetInsertError);
+        continue;
       }
-    );
+
+      const dataRows = [];
+
+      for (let r = 1; r < json.length; r++) {
+        const row = json[r];
+        for (let c = 0; c < row.length; c++) {
+          const cellValue = row[c];
+          const columnName = json[0]?.[c] || `Column ${c + 1}`;
+          const dataType = typeof cellValue;
+
+          dataRows.push({
+            sheet_id: sheetRow.id,
+            row_index: r,
+            column_index: c,
+            column_name: columnName,
+            cell_value: cellValue?.toString() || "",
+            data_type: dataType,
+          });
+        }
+      }
+
+      if (dataRows.length > 0) {
+        const { error: insertError } = await supabase
+          .from("spreadsheet_data")
+          .insert(dataRows);
+
+        if (insertError) {
+          console.error("Erro ao inserir dados:", insertError);
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  } catch (err) {
+    console.error("Erro inesperado:", err);
+    return new Response(JSON.stringify({ error: "Internal server error", details: err.message }), {
+      status: 500,
+    });
   }
-};
-
-serve(handler);
+});
