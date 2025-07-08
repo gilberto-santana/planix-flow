@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, File, CheckCircle, AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { validateFile, sanitizeFileName } from "@/utils/fileValidation";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface FileUploadProps {
   onFileUpload: (file: File) => void;
@@ -15,6 +19,8 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -33,44 +39,83 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     const files = Array.from(e.dataTransfer.files);
     const file = files[0];
     
-    if (file && isValidFileType(file)) {
+    if (file) {
       processFile(file);
     }
   }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && isValidFileType(file)) {
+    if (file) {
       processFile(file);
     }
   }, []);
 
-  const isValidFileType = (file: File) => {
-    const validTypes = [
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'text/csv'
-    ];
-    return validTypes.includes(file.type) || file.name.endsWith('.csv');
-  };
-
   const processFile = async (file: File) => {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para fazer upload de arquivos."
+      });
+      return;
+    }
+
+    // Enhanced file validation
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({
+        variant: "destructive",
+        title: "Arquivo inválido",
+        description: validation.error
+      });
+      setUploadStatus('error');
+      return;
+    }
+
     setUploadedFile(file);
     setUploadStatus('uploading');
     setUploadProgress(0);
 
-    // Simular upload progress
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setUploadStatus('success');
-          onFileUpload(file);
-          return 100;
+    try {
+      // Sanitize file name
+      const sanitizedName = sanitizeFileName(file.name);
+      
+      // Process file via secure edge function
+      const { data, error } = await supabase.functions.invoke('process-spreadsheet', {
+        body: {
+          fileName: sanitizedName,
+          fileSize: file.size,
+          fileType: file.type
         }
-        return prev + 10;
       });
-    }, 200);
+
+      if (error) {
+        throw error;
+      }
+
+      // Simulate progress for UX
+      const interval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 100) {
+            clearInterval(interval);
+            setUploadStatus('success');
+            onFileUpload(file);
+            return 100;
+          }
+          return prev + 25;
+        });
+      }, 300);
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      setUploadStatus('error');
+      toast({
+        variant: "destructive",
+        title: "Erro no upload",
+        description: error.message || "Erro ao processar arquivo"
+      });
+    }
   };
 
   const resetUpload = () => {

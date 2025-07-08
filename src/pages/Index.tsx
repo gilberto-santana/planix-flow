@@ -1,10 +1,12 @@
 import { AuthPage } from "@/components/auth/AuthPage";
 import { Dashboard } from "@/components/dashboard/Dashboard";
 import { useAuth } from "@/hooks/useAuth";
+import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 import { Toaster } from "@/components/ui/toaster";
 
 const Index = () => {
   const { isAuthenticated, loading } = useAuth();
+  useSessionTimeout(); // Initialize session timeout for authenticated users
 
   if (loading) {
     return (

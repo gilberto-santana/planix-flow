@@ -6,12 +6,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Mail, Lock, User, BarChart3, Zap } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { PasswordStrength } from "@/components/ui/password-strength";
+import { validatePasswordStrength } from "@/utils/passwordValidation";
+import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 
 export function AuthPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: '', password: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '' });
   const { signIn, signUp } = useAuth();
+  useSessionTimeout(); // Initialize session timeout
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +26,13 @@ export function AuthPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate password strength
+    const passwordStrength = validatePasswordStrength(registerData.password);
+    if (!passwordStrength.isValid) {
+      return; // Let the UI show validation errors
+    }
+    
     setIsLoading(true);
     await signUp(registerData.email, registerData.password, registerData.name);
     setIsLoading(false);
@@ -159,6 +170,7 @@ export function AuthPage() {
                         required
                       />
                     </div>
+                    <PasswordStrength password={registerData.password} className="mt-2" />
                   </div>
                   
                   <Button 
