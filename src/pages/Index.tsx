@@ -1,13 +1,14 @@
 
 import { AuthPage } from "@/components/auth/AuthPage";
 import { Dashboard } from "@/components/dashboard/Dashboard";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/hooks/useAuth";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
 import { Toaster } from "@/components/ui/toaster";
 
 const Index = () => {
   const { isAuthenticated, loading, initialized, user, session } = useAuth();
-  useSessionTimeout(); // Initialize session timeout for authenticated users
+  useSessionTimeout();
 
   console.log('🔍 Index render:', { 
     isAuthenticated, 
@@ -22,20 +23,17 @@ const Index = () => {
       <div className="min-h-screen bg-gradient-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground mb-2">Carregando...</p>
-          <div className="text-xs text-muted-foreground">
-            Loading: {loading.toString()}, Initialized: {initialized.toString()}
-          </div>
+          <p className="text-muted-foreground">Carregando autenticação...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <>
+    <ErrorBoundary>
       {!isAuthenticated ? <AuthPage /> : <Dashboard />}
       <Toaster />
-    </>
+    </ErrorBoundary>
   );
 };
 

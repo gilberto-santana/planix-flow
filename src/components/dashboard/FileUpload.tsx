@@ -20,16 +20,14 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [authCheckCount, setAuthCheckCount] = useState(0);
-  const { user, session, loading, initialized, verifySession } = useAuth();
+  const { user, session, loading, initialized } = useAuth();
   const { toast } = useToast();
 
   console.log('🔍 FileUpload render:', { 
     hasUser: !!user, 
     hasSession: !!session, 
     loading, 
-    initialized,
-    authCheckCount
+    initialized
   });
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -61,41 +59,6 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     }
   }, []);
 
-  const waitForAuth = async (maxAttempts = 10): Promise<boolean> => {
-    console.log('⏳ FileUpload: Waiting for authentication...');
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      console.log(`🔄 FileUpload: Auth check attempt ${attempt}/${maxAttempts}`);
-      
-      // If still loading, wait a bit
-      if (loading || !initialized) {
-        console.log('⏳ FileUpload: Still loading, waiting...');
-        await new Promise(resolve => setTimeout(resolve, 500));
-        continue;
-      }
-      
-      // If we have user and session, we're good
-      if (user && session) {
-        console.log('✅ FileUpload: Authentication confirmed');
-        return true;
-      }
-      
-      // Try to verify session
-      console.log('🔍 FileUpload: Verifying session...');
-      const currentSession = await verifySession();
-      if (currentSession?.user) {
-        console.log('✅ FileUpload: Session verified');
-        return true;
-      }
-      
-      // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-    
-    console.error('❌ FileUpload: Authentication timeout after', maxAttempts, 'attempts');
-    return false;
-  };
-
   const processFile = async (file: File) => {
     console.log('🔍 FileUpload: Starting file processing...', { 
       fileName: file.name, 
@@ -103,9 +66,28 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
       currentAuth: { hasUser: !!user, hasSession: !!session, loading, initialized }
     });
 
-    setAuthCheckCount(prev => prev + 1);
+    // Check if auth is ready and user is authenticated
+    if (!initialized || loading) {
+      console.error('❌ FileUpload: Authentication not ready');
+      toast({
+        variant: "destructive",
+        title: "Aguarde",
+        description: "Aguarde a verificação de autenticação terminar."
+      });
+      return;
+    }
 
-    // Enhanced file validation
+    if (!user || !session) {
+      console.error('❌ FileUpload: User not authenticated');
+      toast({
+        variant: "destructive",
+        title: "Login necessário",
+        description: "Você precisa estar logado para fazer upload de arquivos."
+      });
+      return;
+    }
+
+    // File validation
     const validation = validateFile(file);
     if (!validation.valid) {
       console.error('❌ FileUpload: File validation failed:', validation.error);
@@ -124,20 +106,6 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     setUploadProgress(0);
 
     try {
-      // Wait for authentication to be ready
-      const isAuthenticated = await waitForAuth();
-      
-      if (!isAuthenticated) {
-        console.error('❌ FileUpload: Authentication failed after waiting');
-        toast({
-          variant: "destructive",
-          title: "Erro de autenticação",
-          description: "Não foi possível confirmar sua autenticação. Tente fazer login novamente."
-        });
-        setUploadStatus('error');
-        return;
-      }
-
       // Create FormData with the file
       const formData = new FormData();
       formData.append('file', file);
@@ -200,35 +168,6 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     setUploadStatus('idle');
     setUploadProgress(0);
     setUploadedFile(null);
-    setAuthCheckCount(0);
-  };
-
-  const retryAuth = async () => {
-    console.log('🔄 FileUpload: Retrying authentication...');
-    setAuthCheckCount(prev => prev + 1);
-    
-    try {
-      const currentSession = await verifySession();
-      if (currentSession?.user) {
-        toast({
-          title: "Autenticação verificada",
-          description: "Você pode tentar fazer upload novamente."
-        });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Falha na autenticação",
-          description: "Faça login novamente."
-        });
-      }
-    } catch (error) {
-      console.error('❌ FileUpload: Retry auth error:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro na verificação",
-        description: "Não foi possível verificar a autenticação."
-      });
-    }
   };
 
   const getStatusIcon = () => {
@@ -272,9 +211,6 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
             <p className="text-muted-foreground mb-4">
               Verificando autenticação...
             </p>
-            <div className="text-xs text-muted-foreground">
-              Loading: {loading.toString()}, Initialized: {initialized.toString()}
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -292,25 +228,12 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
             <p className="text-muted-foreground mb-4">
               Você precisa estar logado para fazer upload de arquivos.
             </p>
-            <div className="text-xs text-muted-foreground mb-4">
-              User: {user ? 'Yes' : 'No'}, Session: {session ? 'Yes' : 'No'}, 
-              Checks: {authCheckCount}
-            </div>
-            <div className="flex gap-2 justify-center">
-              <Button 
-                onClick={() => window.location.reload()}
-                variant="outline"
-              >
-                Recarregar página
-              </Button>
-              <Button 
-                onClick={retryAuth}
-                variant="default"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Verificar Auth
-              </Button>
-            </div>
+            <Button 
+              onClick={() => window.location.reload()}
+              variant="outline"
+            >
+              Recarregar página
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -383,7 +306,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                 Formatos aceitos: .xls, .xlsx, .csv (máx. 10MB)
               </p>
               <div className="text-xs text-muted-foreground mb-4">
-                ✅ Autenticado: {user?.email} (Checks: {authCheckCount})
+                ✅ Autenticado: {user?.email}
               </div>
               <Button className="bg-gradient-primary hover:opacity-90 glow-primary">
                 <Upload className="h-4 w-4 mr-2" />

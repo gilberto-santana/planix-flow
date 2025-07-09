@@ -2,14 +2,12 @@
 import { useState, useEffect } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [initialized, setInitialized] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     console.log('🔄 useAuth: Starting initialization...');
@@ -17,8 +15,6 @@ export const useAuth = () => {
 
     const initializeAuth = async () => {
       try {
-        console.log('🔍 useAuth: Getting current session...');
-        
         // Get current session first
         const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         
@@ -39,7 +35,7 @@ export const useAuth = () => {
           setLoading(false);
         }
 
-        // Set up auth state listener after initial session check
+        // Set up auth state listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, newSession) => {
             console.log('🔄 useAuth: Auth state changed:', { 
@@ -52,12 +48,8 @@ export const useAuth = () => {
             if (mounted) {
               setSession(newSession);
               setUser(newSession?.user ?? null);
-              
-              // Only set loading to false if we haven't initialized yet
-              if (!initialized) {
-                setInitialized(true);
-                setLoading(false);
-              }
+              setLoading(false);
+              setInitialized(true);
             }
           }
         );
@@ -103,20 +95,7 @@ export const useAuth = () => {
 
       if (error) {
         console.error('❌ useAuth: Sign up error:', error);
-        toast({
-          variant: "destructive",
-          title: "Erro no cadastro",
-          description: error.message
-        });
         return { error };
-      }
-
-      if (data.user && !data.session) {
-        console.log('📧 useAuth: Email confirmation required');
-        toast({
-          title: "Verifique seu email",
-          description: "Um link de confirmação foi enviado para seu email."
-        });
       }
 
       console.log('✅ useAuth: Sign up successful');
@@ -124,11 +103,6 @@ export const useAuth = () => {
     } catch (error) {
       console.error('💥 useAuth: Sign up exception:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
-      toast({
-        variant: "destructive",
-        title: "Erro no cadastro",
-        description: message
-      });
       return { error: { message } };
     } finally {
       setLoading(false);
@@ -147,29 +121,15 @@ export const useAuth = () => {
 
       if (error) {
         console.error('❌ useAuth: Sign in error:', error);
-        toast({
-          variant: "destructive",
-          title: "Erro no login",
-          description: error.message
-        });
         return { error };
       }
 
       console.log('✅ useAuth: Sign in successful', { userId: data.user?.id });
-      toast({
-        title: "Login realizado",
-        description: "Bem-vindo ao Planix!"
-      });
-
       return { data, error: null };
+
     } catch (error) {
       console.error('💥 useAuth: Sign in exception:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
-      toast({
-        variant: "destructive",
-        title: "Erro no login",
-        description: message
-      });
       return { error: { message } };
     } finally {
       setLoading(false);
@@ -185,29 +145,14 @@ export const useAuth = () => {
       
       if (error) {
         console.error('❌ useAuth: Sign out error:', error);
-        toast({
-          variant: "destructive",
-          title: "Erro no logout",
-          description: error.message
-        });
         return { error };
       }
 
       console.log('✅ useAuth: Sign out successful');
-      toast({
-        title: "Logout realizado",
-        description: "Até logo!"
-      });
-
       return { error: null };
     } catch (error) {
       console.error('💥 useAuth: Sign out exception:', error);
       const message = error instanceof Error ? error.message : 'Erro desconhecido';
-      toast({
-        variant: "destructive",
-        title: "Erro no logout",
-        description: message
-      });
       return { error: { message } };
     } finally {
       setLoading(false);
