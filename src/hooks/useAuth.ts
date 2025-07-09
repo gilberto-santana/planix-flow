@@ -10,7 +10,7 @@ interface UseAuthReturn {
   initialized: boolean;
   isAuthenticated: boolean;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, name?: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -71,7 +71,7 @@ export const useAuth = (): UseAuthReturn => {
     return { error };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, name?: string) => {
     console.log('🔍 useAuth: Attempting sign up for:', email);
     setLoading(true);
     
@@ -81,7 +81,8 @@ export const useAuth = (): UseAuthReturn => {
       email,
       password,
       options: {
-        emailRedirectTo: redirectUrl
+        emailRedirectTo: redirectUrl,
+        data: name ? { display_name: name } : undefined
       }
     });
 
