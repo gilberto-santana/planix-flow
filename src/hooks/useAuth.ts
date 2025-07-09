@@ -1,243 +1,129 @@
-import { useState, useCallback } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Upload, File, CheckCircle, AlertCircle, X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { validateFile, sanitizeFileName } from "@/utils/fileValidation";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 
-interface FileUploadProps {
-  onFileUpload: (file: File) => void;
-  className?: string;
+import { useState, useEffect } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+
+interface UseAuthReturn {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  initialized: boolean;
+  isAuthenticated: boolean;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string) => Promise<{ error: any }>;
+  signOut: () => Promise<void>;
 }
 
-export function FileUpload({ onFileUpload, className }: FileUploadProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const { user, loading } = useAuth();
-  const { toast } = useToast();
+export const useAuth = (): UseAuthReturn => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+  useEffect(() => {
+    console.log('🔍 useAuth: Initializing auth hook...');
     
-    const files = Array.from(e.dataTransfer.files);
-    const file = files[0];
-    
-    if (file) {
-      processFile(file);
-    }
-  }, [user, loading]);
-
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      processFile(file);
-    }
-  }, [user, loading]);
-
-  const processFile = async (file: File) => {
-    if (loading) {
-      toast({
-        variant: "destructive",
-        title: "Aguarde",
-        description: "Aguarde a verificação de autenticação terminar."
-      });
-      return;
-    }
-
-    if (!user) {
-      toast({
-        variant: "destructive",
-        title: "Erro de autenticação",
-        description: "Você precisa estar logado para fazer upload de arquivos."
-      });
-      return;
-    }
-
-    const validation = validateFile(file);
-    if (!validation.valid) {
-      toast({
-        variant: "destructive",
-        title: "Arquivo inválido",
-        description: validation.error
-      });
-      setUploadStatus('error');
-      return;
-    }
-
-    setUploadedFile(file);
-    setUploadStatus('uploading');
-    setUploadProgress(0);
-
-    try {
-      const sanitizedName = sanitizeFileName(file.name);
-      const filePath = `${user.id}/${sanitizedName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('spreadsheets')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true
-        });
-
-      if (uploadError) throw uploadError;
-
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setUploadStatus('success');
-            onFileUpload(file);
-            return 100;
-          }
-          return prev + 25;
-        });
-      }, 300);
-
-    } catch (error: any) {
-      console.error('Upload error:', error);
-      setUploadStatus('error');
-      toast({
-        variant: "destructive",
-        title: "Erro no upload",
-        description: error.message || "Erro ao processar arquivo"
-      });
-    }
-  };
-
-  const resetUpload = () => {
-    setUploadStatus('idle');
-    setUploadProgress(0);
-    setUploadedFile(null);
-  };
-
-  const getStatusIcon = () => {
-    switch (uploadStatus) {
-      case 'uploading':
-        return <Upload className="h-6 w-6 text-primary animate-pulse" />;
-      case 'success':
-        return <CheckCircle className="h-6 w-6 text-success" />;
-      case 'error':
-        return <AlertCircle className="h-6 w-6 text-destructive" />;
-      default:
-        return <Upload className="h-12 w-12 text-muted-foreground" />;
-    }
-  };
-
-  const getStatusText = () => {
-    switch (uploadStatus) {
-      case 'uploading':
-        return 'Enviando arquivo...';
-      case 'success':
-        return 'Arquivo enviado com sucesso!';
-      case 'error':
-        return 'Erro ao enviar arquivo';
-      default:
-        return 'Arraste seu arquivo aqui ou clique para selecionar';
-    }
-  };
-
-  if (uploadStatus === 'success') {
-    return (
-      <Card className={cn("glass glow-accent", className)}>
-        <CardContent className="p-8">
-          <div className="text-center">
-            <div className="flex justify-center mb-4">
-              {getStatusIcon()}
-            </div>
-            <h3 className="text-lg font-semibold mb-2">{getStatusText()}</h3>
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-4">
-              <File className="h-4 w-4" />
-              <span>{uploadedFile?.name}</span>
-              <span>({(uploadedFile?.size || 0 / 1024 / 1024).toFixed(2)} MB)</span>
-            </div>
-            <Button 
-              variant="outline" 
-              onClick={resetUpload}
-              className="w-full"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Enviar outro arquivo
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    // Set up auth state listener first
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔍 useAuth: Auth state changed:', { event, hasSession: !!session, hasUser: !!session?.user });
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+        setInitialized(true);
+      }
     );
-  }
 
-  return (
-    <Card className={cn("glass transition-all duration-300", {
-      "glow-primary border-primary/50": isDragOver,
-      "glow-secondary": uploadStatus === 'uploading'
-    }, className)}>
-      <CardContent
-        className="p-8 cursor-pointer"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => document.getElementById('file-input')?.click()}
-      >
-        <input
-          id="file-input"
-          type="file"
-          accept=".xls,.xlsx,.csv"
-          onChange={handleFileSelect}
-          className="hidden"
-        />
-        
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            {getStatusIcon()}
-          </div>
-          
-          <h3 className="text-lg font-semibold mb-2">
-            {uploadStatus === 'idle' ? 'Upload da Planilha' : getStatusText()}
-          </h3>
-          
-          {uploadStatus === 'idle' && (
-            <>
-              <p className="text-muted-foreground mb-4">
-                Arraste seu arquivo aqui ou clique para selecionar
-              </p>
-              <p className="text-sm text-muted-foreground mb-6">
-                Formatos aceitos: .xls, .xlsx, .csv (máx. 10MB)
-              </p>
-              <Button 
-                className="bg-gradient-primary hover:opacity-90 glow-primary"
-                disabled={loading}
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                Selecionar arquivo
-              </Button>
-            </>
-          )}
-          
-          {uploadStatus === 'uploading' && (
-            <div className="mt-4">
-              <Progress value={uploadProgress} className="mb-2" />
-              <p className="text-sm text-muted-foreground">
-                {uploadProgress}% concluído
-              </p>
-            </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('❌ useAuth: Error getting session:', error);
+      } else {
+        console.log('🔍 useAuth: Initial session check:', { hasSession: !!session, hasUser: !!session?.user });
+      }
+      
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+      setInitialized(true);
+    });
+
+    return () => {
+      console.log('🔍 useAuth: Cleaning up auth subscription');
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (email: string, password: string) => {
+    console.log('🔍 useAuth: Attempting sign in for:', email);
+    setLoading(true);
+    
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      console.error('❌ useAuth: Sign in error:', error);
+      setLoading(false);
+    }
+
+    return { error };
+  };
+
+  const signUp = async (email: string, password: string) => {
+    console.log('🔍 useAuth: Attempting sign up for:', email);
+    setLoading(true);
+    
+    const redirectUrl = `${window.location.origin}/`;
+    
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl
+      }
+    });
+
+    if (error) {
+      console.error('❌ useAuth: Sign up error:', error);
+      setLoading(false);
+    }
+
+    return { error };
+  };
+
+  const signOut = async () => {
+    console.log('🔍 useAuth: Signing out...');
+    setLoading(true);
+    
+    const { error } = await supabase.auth.signOut();
+    
+    if (error) {
+      console.error('❌ useAuth: Sign out error:', error);
+    }
+    
+    setLoading(false);
+  };
+
+  const isAuthenticated = !!user && !!session;
+
+  console.log('🔍 useAuth: Current state:', { 
+    hasUser: !!user, 
+    hasSession: !!session, 
+    loading, 
+    initialized, 
+    isAuthenticated 
+  });
+
+  return {
+    user,
+    session,
+    loading,
+    initialized,
+    isAuthenticated,
+    signIn,
+    signUp,
+    signOut
+  };
+};

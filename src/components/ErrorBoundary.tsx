@@ -30,27 +30,30 @@ export class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <Card className="glass border-destructive/50">
-          <CardContent className="p-8">
-            <div className="text-center">
-              <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Ops! Algo deu errado</h3>
-              <p className="text-muted-foreground mb-4">
-                Ocorreu um erro inesperado. Tente recarregar a página.
-              </p>
-              <div className="text-xs text-muted-foreground mb-4 font-mono">
-                {this.state.error?.message}
+        <div className="min-h-screen bg-gradient-background flex items-center justify-center p-4">
+          <Card className="glass border-destructive/50 max-w-md w-full">
+            <CardContent className="p-8">
+              <div className="text-center">
+                <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">Ops! Algo deu errado</h3>
+                <p className="text-muted-foreground mb-4">
+                  Ocorreu um erro inesperado. Tente recarregar a página.
+                </p>
+                <div className="text-xs text-muted-foreground mb-4 font-mono p-2 bg-muted rounded">
+                  {this.state.error?.message}
+                </div>
+                <Button 
+                  onClick={() => window.location.reload()}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Recarregar página
+                </Button>
               </div>
-              <Button 
-                onClick={() => window.location.reload()}
-                variant="outline"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Recarregar página
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       );
     }
 
