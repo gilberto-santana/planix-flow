@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Upload, File, CheckCircle, AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { validateFile, sanitizeFileName } from "@/utils/fileValidation";
+import { validateFile } from "@/utils/fileValidation";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -78,34 +78,39 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     setUploadProgress(0);
 
     try {
-      // Sanitize file name
-      const sanitizedName = sanitizeFileName(file.name);
+      // Create FormData with the file
+      const formData = new FormData();
+      formData.append('file', file);
       
-      // Process file via secure edge function
-      const { data, error } = await supabase.functions.invoke('process-spreadsheet', {
-        body: {
-          fileName: sanitizedName,
-          fileSize: file.size,
-          fileType: file.type
-        }
-      });
-
-      if (error) {
-        throw error;
+      // Get current session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Sessão não encontrada');
       }
 
-      // Simulate progress for UX
-      const interval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setUploadStatus('success');
-            onFileUpload(file);
-            return 100;
-          }
-          return prev + 25;
-        });
-      }, 300);
+      // Call edge function with proper authentication
+      const response = await fetch(
+        `https://lferxmdlttvitvuovekps.supabase.co/functions/v1/process-spreadsheet`,
+        {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro no upload');
+      }
+
+      const data = await response.json();
+      
+      // Update progress to completion
+      setUploadProgress(100);
+      setUploadStatus('success');
+      onFileUpload(file);
 
     } catch (error: any) {
       console.error('Upload error:', error);
