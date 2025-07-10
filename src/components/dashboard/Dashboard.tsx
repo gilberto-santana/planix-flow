@@ -60,14 +60,12 @@ export function Dashboard() {
         return;
       }
 
-      // Simplified query with explicit typing to avoid deep type instantiation
-      const query = supabase
+      // Use direct query execution to avoid deep type instantiation
+      const { data, error } = await supabase
         .from("spreadsheet_data")
-        .select("row_index, column_name, cell_value, sheet_id, id, column_index, created_at, data_type")
+        .select("*")
         .eq("file_id", fileId)
-        .order("row_index", { ascending: true });
-
-      const { data, error } = await query;
+        .order("row_index", { ascending: true }) as { data: DatabaseRow[] | null; error: any };
 
       if (error || !data) {
         console.error("Erro ao buscar dados:", error);
@@ -76,12 +74,12 @@ export function Dashboard() {
         return;
       }
 
-      // Get sheet names in a separate query - fixed column name
+      // Get sheet names in a separate query
       const sheetIds = [...new Set(data.map(row => row.sheet_id))];
       const { data: sheetsData, error: sheetsError } = await supabase
         .from("sheets")
         .select("id, sheet_name")
-        .in("id", sheetIds);
+        .in("id", sheetIds) as { data: { id: string; sheet_name: string }[] | null; error: any };
 
       if (sheetsError) {
         console.error("Erro ao buscar sheets:", sheetsError);
