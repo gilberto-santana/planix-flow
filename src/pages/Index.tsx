@@ -1,3 +1,4 @@
+// src/pages/Index.tsx
 
 import { AuthPage } from "@/components/auth/AuthPage";
 import { Dashboard } from "@/components/dashboard/Dashboard";
@@ -10,20 +11,20 @@ const Index = () => {
   const { isAuthenticated, loading, initialized, user, session } = useAuth();
   useSessionTimeout();
 
-  console.log('🔍 Index render:', { 
-    isAuthenticated, 
-    loading, 
+  console.log("🔍 Index render:", {
+    isAuthenticated,
+    loading,
     initialized,
     hasUser: !!user,
-    hasSession: !!session
+    hasSession: !!session,
   });
 
-  if (loading || !initialized) {
+  if (loading || !initialized || !user) {
     return (
       <div className="min-h-screen bg-gradient-background flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Carregando autenticação...</p>
+          <p className="text-muted-foreground">Verificando autenticação...</p>
         </div>
       </div>
     );
