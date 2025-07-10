@@ -1,9 +1,11 @@
-
 import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
+import { DashboardHeader } from "./DashboardHeader";
+import { DashboardStats } from "./DashboardStats";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface DatabaseRow {
   row_index: number;
@@ -31,6 +33,7 @@ interface ChartData {
 
 export function Dashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -44,6 +47,11 @@ export function Dashboard() {
     setFileName(file.name);
 
     try {
+      toast({
+        title: "Processando planilha",
+        description: `Iniciando o processamento de ${file.name}...`,
+      });
+
       const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
         body: {
           filePath,
@@ -54,6 +62,11 @@ export function Dashboard() {
 
       if (error) {
         console.error("Erro no parsing:", error);
+        toast({
+          title: "Erro no processamento",
+          description: "Não foi possível processar a planilha. Tente novamente.",
+          variant: "destructive",
+        });
         setLoading(false);
         return;
       }
@@ -73,6 +86,11 @@ export function Dashboard() {
 
       if (fetchError || !rawData) {
         console.error("Erro ao buscar dados:", fetchError);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar os dados da planilha.",
+          variant: "destructive",
+        });
         setLoading(false);
         return;
       }
@@ -87,23 +105,62 @@ export function Dashboard() {
 
       const generatedCharts = generateChartSet(transformedData);
       setCharts(generatedCharts);
+
+      toast({
+        title: "Planilha processada com sucesso!",
+        description: `${generatedCharts.length} gráficos foram gerados para ${file.name}.`,
+      });
     } catch (err) {
       console.error("Erro inesperado:", err);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro durante o processamento. Tente novamente.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-4 space-y-6">
-      <FileUpload onFileUpload={handleFileUpload} />
-      {loading && <p className="text-muted-foreground">Processando planilha e gerando gráficos...</p>}
-      {!loading && charts.length > 0 && (
-        <>
-          <h2 className="text-xl font-semibold">Gráficos gerados para: {fileName}</h2>
-          <ChartGrid charts={charts} />
-        </>
-      )}
+    <div className="min-h-screen bg-background">
+      <DashboardHeader />
+      
+      <main className="container mx-auto py-6 space-y-6">
+        <div className="space-y-2">
+          <h2 className="text-2xl font-bold tracking-tight">Bem-vindo ao seu Dashboard</h2>
+          <p className="text-muted-foreground">
+            Faça upload de planilhas e gere gráficos automáticos dos seus dados.
+          </p>
+        </div>
+
+        <DashboardStats />
+
+        <div className="space-y-6">
+          <FileUpload onFileUpload={handleFileUpload} />
+          
+          {loading && (
+            <div className="flex items-center justify-center p-8">
+              <div className="text-center space-y-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="text-muted-foreground">Processando planilha e gerando gráficos...</p>
+              </div>
+            </div>
+          )}
+          
+          {!loading && charts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Gráficos gerados para: {fileName}</h3>
+                <span className="text-sm text-muted-foreground">
+                  {charts.length} gráfico{charts.length !== 1 ? 's' : ''} criado{charts.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <ChartGrid charts={charts} />
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
