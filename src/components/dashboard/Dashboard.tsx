@@ -1,4 +1,5 @@
 
+
 import { useState } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardStats } from "./DashboardStats";
@@ -17,9 +18,6 @@ interface DatabaseRow {
   column_index: number;
   created_at: string;
   data_type: string | null;
-  sheets?: {
-    name: string;
-  };
 }
 
 interface SpreadsheetRow {
@@ -78,18 +76,18 @@ export function Dashboard() {
         return;
       }
 
-      // Get sheet names in a separate query
+      // Get sheet names in a separate query - fixed column name
       const sheetIds = [...new Set(data.map(row => row.sheet_id))];
       const { data: sheetsData, error: sheetsError } = await supabase
         .from("sheets")
-        .select("id, name")
+        .select("id, sheet_name")
         .in("id", sheetIds);
 
       if (sheetsError) {
         console.error("Erro ao buscar sheets:", sheetsError);
       }
 
-      const sheetsMap = new Map(sheetsData?.map(sheet => [sheet.id, sheet.name]) || []);
+      const sheetsMap = new Map(sheetsData?.map(sheet => [sheet.id, sheet.sheet_name]) || []);
 
       const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
@@ -225,3 +223,4 @@ function generateChartSet(rows: SpreadsheetRow[]) {
 
   return charts;
 }
+
