@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
-import { DashboardHeader } from "./DashboardHeader";
-import { DashboardStats } from "./DashboardStats";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -38,134 +36,77 @@ export function Dashboard() {
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  if (!user) {
-    return <p className="text-muted-foreground">Verificando autenticação do usuário...</p>;
-  }
-
   const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+    if (!user) return;
+
     setLoading(true);
     setFileName(file.name);
 
-    try {
-      toast({
-        title: "Processando planilha",
-        description: `Iniciando o processamento de ${file.name}...`,
-      });
+    const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+      body: {
+        filePath,
+        fileId,
+        userId: user.id,
+      },
+    });
 
-      const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
-        body: {
-          filePath,
-          fileId,
-          userId: user.id,
-        }
-      });
-
-      if (error) {
-        console.error("Erro no parsing:", error);
-        toast({
-          title: "Erro no processamento",
-          description: "Não foi possível processar a planilha. Tente novamente.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Query the spreadsheet data with proper typing
-      const { data: rawData, error: fetchError } = await supabase
-        .from("spreadsheet_data")
-        .select(`
-          *,
-          sheets!inner(
-            sheet_name,
-            spreadsheet_id
-          )
-        `)
-        .eq("sheets.spreadsheet_id", fileId)
-        .order("row_index", { ascending: true });
-
-      if (fetchError || !rawData) {
-        console.error("Erro ao buscar dados:", fetchError);
-        toast({
-          title: "Erro ao carregar dados",
-          description: "Não foi possível carregar os dados da planilha.",
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Transform the data to match our interface
-      const transformedData: SpreadsheetRow[] = rawData.map((row: any) => ({
-        row_index: row.row_index,
-        column_name: row.column_name || '',
-        value: row.cell_value || '',
-        sheet_name: row.sheets.sheet_name
-      }));
-
-      const generatedCharts = generateChartSet(transformedData);
-      setCharts(generatedCharts);
-
-      toast({
-        title: "Planilha processada com sucesso!",
-        description: `${generatedCharts.length} gráficos foram gerados para ${file.name}.`,
-      });
-    } catch (err) {
-      console.error("Erro inesperado:", err);
-      toast({
-        title: "Erro inesperado",
-        description: "Ocorreu um erro durante o processamento. Tente novamente.",
-        variant: "destructive",
-      });
-    } finally {
+    if (invokeError) {
+      console.error("Erro ao invocar função:", invokeError);
+      toast({ title: "Erro ao processar", description: "Não foi possível processar a planilha." });
       setLoading(false);
+      return;
     }
+
+    const { data, error } = await supabase
+      .from("spreadsheet_data")
+      .select(`
+        row_index,
+        column_name,
+        cell_value,
+        sheet_id,
+        id,
+        column_index,
+        created_at,
+        data_type,
+        sheets ( name )
+      `)
+      .eq("file_id", fileId)
+      .order("row_index", { ascending: true });
+
+    if (error || !data) {
+      console.error("Erro ao buscar dados:", error);
+      toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
+      setLoading(false);
+      return;
+    }
+
+    const normalized: SpreadsheetRow[] = data.map((row: any) => ({
+      row_index: row.row_index,
+      column_name: row.column_name || "",
+      value: row.cell_value || "",
+      sheet_name: row.sheets?.name || "Aba",
+    }));
+
+    const generatedCharts = generateChartSet(normalized);
+    setCharts(generatedCharts);
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardHeader />
-      
-      <main className="container mx-auto py-6 space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-bold tracking-tight">Bem-vindo ao seu Dashboard</h2>
-          <p className="text-muted-foreground">
-            Faça upload de planilhas e gere gráficos automáticos dos seus dados.
-          </p>
-        </div>
-
-        <DashboardStats />
-
-        <div className="space-y-6">
-          <FileUpload onFileUpload={handleFileUpload} />
-          
-          {loading && (
-            <div className="flex items-center justify-center p-8">
-              <div className="text-center space-y-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-                <p className="text-muted-foreground">Processando planilha e gerando gráficos...</p>
-              </div>
-            </div>
-          )}
-          
-          {!loading && charts.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-semibold">Gráficos gerados para: {fileName}</h3>
-                <span className="text-sm text-muted-foreground">
-                  {charts.length} gráfico{charts.length !== 1 ? 's' : ''} criado{charts.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <ChartGrid charts={charts} />
-            </div>
-          )}
-        </div>
-      </main>
+    <div className="p-4 space-y-6">
+      <FileUpload onFileUpload={handleFileUpload} />
+      {loading && <p className="text-muted-foreground">Processando planilha e gerando gráficos...</p>}
+      {!loading && charts.length > 0 && (
+        <>
+          <h2 className="text-xl font-semibold">Gráficos gerados para: {fileName}</h2>
+          <ChartGrid charts={charts} />
+        </>
+      )}
     </div>
   );
 }
 
-function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
+function generateChartSet(rows: SpreadsheetRow[]) {
   if (!rows || rows.length === 0) return [];
 
   const bySheet = new Map<string, SpreadsheetRow[]>();
@@ -192,7 +133,6 @@ function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
     if (parsedRows.length < 2) continue;
 
     const labels = Object.keys(parsedRows[0]).filter((k) => k.toLowerCase() !== "total");
-
     for (const label of labels) {
       const chart: ChartData = {
         type: "bar",
