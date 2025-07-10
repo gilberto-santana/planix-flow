@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardStats } from "./DashboardStats";
@@ -16,6 +17,9 @@ interface DatabaseRow {
   column_index: number;
   created_at: string;
   data_type: string | null;
+  sheets?: {
+    name: string;
+  };
 }
 
 interface SpreadsheetRow {
@@ -44,59 +48,69 @@ export function Dashboard() {
     setLoading(true);
     setFileName(file.name);
 
-    const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
-      body: {
-        filePath,
-        fileId,
-        userId: user.id,
-      },
-    });
+    try {
+      const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+        body: {
+          filePath,
+          fileId,
+          userId: user.id,
+        },
+      });
 
-    if (invokeError) {
-      console.error("Erro ao invocar função:", invokeError);
-      toast({ title: "Erro ao processar", description: "Não foi possível processar a planilha." });
+      if (invokeError) {
+        console.error("Erro ao invocar função:", invokeError);
+        toast({ title: "Erro ao processar", description: "Não foi possível processar a planilha." });
+        setLoading(false);
+        return;
+      }
+
+      // Simplified query to avoid deep type instantiation
+      const { data, error } = await supabase
+        .from("spreadsheet_data")
+        .select("row_index, column_name, cell_value, sheet_id, id, column_index, created_at, data_type")
+        .eq("file_id", fileId)
+        .order("row_index", { ascending: true });
+
+      if (error || !data) {
+        console.error("Erro ao buscar dados:", error);
+        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
+        setLoading(false);
+        return;
+      }
+
+      // Get sheet names in a separate query
+      const sheetIds = [...new Set(data.map(row => row.sheet_id))];
+      const { data: sheetsData, error: sheetsError } = await supabase
+        .from("sheets")
+        .select("id, name")
+        .in("id", sheetIds);
+
+      if (sheetsError) {
+        console.error("Erro ao buscar sheets:", sheetsError);
+      }
+
+      const sheetsMap = new Map(sheetsData?.map(sheet => [sheet.id, sheet.name]) || []);
+
+      const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
+        row_index: row.row_index,
+        column_name: row.column_name || "",
+        value: row.cell_value || "",
+        sheet_name: sheetsMap.get(row.sheet_id) || "Aba",
+      }));
+
+      const generatedCharts = generateChartSet(normalized);
+      setCharts(generatedCharts);
       setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("spreadsheet_data")
-      .select(`
-        row_index,
-        column_name,
-        cell_value,
-        sheet_id,
-        id,
-        column_index,
-        created_at,
-        data_type,
-        sheets ( name )
-      `)
-      .eq("file_id", fileId)
-      .order("row_index", { ascending: true });
-
-    if (error || !data) {
-      console.error("Erro ao buscar dados:", error);
-      toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
+      
+      toast({ 
+        title: "Planilha processada com sucesso!", 
+        description: `${generatedCharts.length} gráficos foram gerados.` 
+      });
+    } catch (error) {
+      console.error("Erro no processamento:", error);
+      toast({ title: "Erro", description: "Erro inesperado durante o processamento." });
       setLoading(false);
-      return;
     }
-
-    const normalized: SpreadsheetRow[] = data.map((row: any) => ({
-      row_index: row.row_index,
-      column_name: row.column_name || "",
-      value: row.cell_value || "",
-      sheet_name: row.sheets?.name || "Aba",
-    }));
-
-    const generatedCharts = generateChartSet(normalized);
-    setCharts(generatedCharts);
-    setLoading(false);
-    
-    toast({ 
-      title: "Planilha processada com sucesso!", 
-      description: `${generatedCharts.length} gráficos foram gerados.` 
-    });
   };
 
   return (
