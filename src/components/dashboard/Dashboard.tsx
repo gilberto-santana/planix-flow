@@ -1,11 +1,9 @@
-// src/components/dashboard/Dashboard.tsx
 
 import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { v4 as uuidv4 } from "uuid";
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -22,39 +20,33 @@ export function Dashboard() {
     setFileName(file.name);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/parse-uploaded-sheet`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
+        body: {
           filePath,
           fileId,
           userId: user.id,
-        }),
+        }
       });
 
-      const result = await response.json();
-      if (!response.ok) {
-        console.error("Erro no parsing:", result.error);
+      if (error) {
+        console.error("Erro no parsing:", error);
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
+      const { data: spreadsheetData, error: fetchError } = await supabase
         .from("spreadsheet_data")
         .select("*")
         .eq("file_id", fileId)
         .order("row_index", { ascending: true });
 
-      if (error || !data) {
-        console.error("Erro ao buscar dados:", error);
+      if (fetchError || !spreadsheetData) {
+        console.error("Erro ao buscar dados:", fetchError);
         setLoading(false);
         return;
       }
 
-      const generatedCharts = generateChartSet(data);
+      const generatedCharts = generateChartSet(spreadsheetData);
       setCharts(generatedCharts);
     } catch (err) {
       console.error("Erro inesperado:", err);

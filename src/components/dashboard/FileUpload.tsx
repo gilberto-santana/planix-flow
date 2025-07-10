@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,6 @@ import { validateFile } from "@/utils/fileValidation";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { v4 as uuidv4 } from "uuid";
 
 interface FileUploadProps {
   onFileUpload: (file: File, fileId: string, filePath: string) => void;
@@ -31,7 +31,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
       return;
     }
 
-    const fileId = uuidv4();
+    const fileId = crypto.randomUUID();
     const ext = file.name.split('.').pop();
     const filePath = `${user.id}/${fileId}.${ext}`;
 
