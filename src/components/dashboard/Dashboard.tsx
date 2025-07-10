@@ -1,183 +1,113 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
-import { BarChart3, FileSpreadsheet, User, LogOut, Zap, TrendingUp } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-
-interface DashboardData {
-  fileName: string;
-  sheets: Array<{
-    name: string;
-    charts: Array<{
-      type: 'bar' | 'line' | 'pie';
-      title: string;
-      data: any[];
-    }>;
-  }>;
-}
+import { supabase } from "@/integrations/supabase/client";
+import { v4 as uuidv4 } from "uuid";
 
 export function Dashboard() {
-  const { user, signOut } = useAuth();
-  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [currentSheet, setCurrentSheet] = useState(0);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [charts, setCharts] = useState<any[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = (file: File) => {
-    // TODO: Integrar com Supabase para processamento
-    // Simulando dados para demonstração
-    setTimeout(() => {
-      setDashboardData({
-        fileName: file.name,
-        sheets: [
-          {
-            name: "Vendas",
-            charts: [
-              {
-                type: 'bar',
-                title: 'Vendas por Mês',
-                data: [
-                  { name: 'Jan', value: 4000 },
-                  { name: 'Fev', value: 3000 },
-                  { name: 'Mar', value: 5000 },
-                  { name: 'Abr', value: 4500 },
-                ]
-              },
-              {
-                type: 'pie',
-                title: 'Vendas por Categoria',
-                data: [
-                  { name: 'Eletrônicos', value: 400 },
-                  { name: 'Roupas', value: 300 },
-                  { name: 'Casa', value: 200 },
-                ]
-              }
-            ]
-          }
-        ]
-      });
-    }, 3000);
-  };
+  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+    if (!user) return;
 
-  const handleLogout = () => {
-    signOut();
+    setLoading(true);
+    setFileName(file.name);
+
+    // Chama a função parse-uploaded-sheet
+    const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/parse-uploaded-sheet`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({
+        filePath,
+        fileId,
+        userId: user.id,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      console.error("Erro no parsing:", result.error);
+      setLoading(false);
+      return;
+    }
+
+    // Busca os dados processados no Supabase
+    const { data, error } = await supabase
+      .from("spreadsheet_data")
+      .select("*")
+      .eq("file_id", fileId)
+      .order("row_index", { ascending: true });
+
+    if (error || !data) {
+      console.error("Erro ao buscar dados:", error);
+      setLoading(false);
+      return;
+    }
+
+    // Gera os gráficos automaticamente
+    const generatedCharts = generateChartSet(data);
+    setCharts(generatedCharts);
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-background">
-      {/* Header */}
-      <header className="border-b border-border/50 glass">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <BarChart3 className="h-8 w-8 text-primary glow-primary" />
-              <Zap className="h-4 w-4 text-accent absolute -top-1 -right-1" />
-            </div>
-            <h1 className="text-2xl font-bold gradient-text">Planix</h1>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <Badge variant="secondary" className="hidden sm:flex">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              Auto-Dashboard
-            </Badge>
-            <Button variant="ghost" size="sm" className="gap-2">
-              <User className="h-4 w-4" />
-              {user?.email?.split('@')[0] || 'Usuário'}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
-        {!dashboardData ? (
-          /* Upload Section */
-          <div className="max-w-2xl mx-auto">
-            <div className="text-center mb-8 animate-fade-in">
-              <h2 className="text-3xl font-bold mb-4">
-                Transforme suas <span className="gradient-text">planilhas</span> em dashboards
-              </h2>
-              <p className="text-muted-foreground text-lg">
-                Upload automático • Gráficos inteligentes • Visualização instantânea
-              </p>
-            </div>
-            
-            <FileUpload onFileUpload={handleFileUpload} className="animate-fade-in" />
-            
-            {/* Features */}
-            <div className="grid md:grid-cols-3 gap-6 mt-12 animate-fade-in" style={{ animationDelay: '0.2s' }}>
-              <Card className="glass text-center">
-                <CardContent className="p-6">
-                  <div className="text-4xl mb-4">⚡</div>
-                  <h3 className="font-semibold mb-2">Processamento Instantâneo</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Seus dados são analisados e transformados em gráficos automaticamente
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="glass text-center">
-                <CardContent className="p-6">
-                  <div className="text-4xl mb-4">🧠</div>
-                  <h3 className="font-semibold mb-2">IA Inteligente</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Detecção automática de tipos de dados e sugestão dos melhores gráficos
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card className="glass text-center">
-                <CardContent className="p-6">
-                  <div className="text-4xl mb-4">📊</div>
-                  <h3 className="font-semibold mb-2">Múltiplos Formatos</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Suporte para Excel (.xls, .xlsx) e CSV com múltiplas abas
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        ) : (
-          /* Dashboard Section */
-          <div className="animate-fade-in">
-            {/* File Info */}
-            <Card className="glass glow-primary mb-8">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-3">
-                  <FileSpreadsheet className="h-6 w-6 text-primary" />
-                  <span>{dashboardData.fileName}</span>
-                  <Badge className="bg-gradient-primary">
-                    {dashboardData.sheets.length} aba{dashboardData.sheets.length > 1 ? 's' : ''}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-            </Card>
-
-            {/* Sheet Tabs */}
-            {dashboardData.sheets.length > 1 && (
-              <div className="flex gap-2 mb-6">
-                {dashboardData.sheets.map((sheet, index) => (
-                  <Button
-                    key={index}
-                    variant={currentSheet === index ? "default" : "outline"}
-                    onClick={() => setCurrentSheet(index)}
-                    className={currentSheet === index ? "bg-gradient-primary glow-primary" : ""}
-                  >
-                    {sheet.name}
-                  </Button>
-                ))}
-              </div>
-            )}
-
-            {/* Charts */}
-            <ChartGrid charts={dashboardData.sheets[currentSheet].charts} />
-          </div>
-        )}
-      </main>
+    <div className="p-4 space-y-6">
+      <FileUpload onFileUpload={handleFileUpload} />
+      {loading && <p className="text-muted-foreground">Processando planilha e gerando gráficos...</p>}
+      {!loading && charts.length > 0 && (
+        <>
+          <h2 className="text-xl font-semibold">Gráficos gerados para: {fileName}</h2>
+          <ChartGrid charts={charts} />
+        </>
+      )}
     </div>
   );
+}
+
+// Lógica simples de geração automática de gráficos (exemplo)
+function generateChartSet(rows: any[]) {
+  if (!rows || rows.length === 0) return [];
+
+  const bySheet = new Map<string, any[]>();
+
+  for (const row of rows) {
+    if (!bySheet.has(row.sheet_name)) bySheet.set(row.sheet_name, []);
+    bySheet.get(row.sheet_name)!.push(row);
+  }
+
+  const charts: any[] = [];
+
+  for (const [sheetName, sheetRows] of bySheet.entries()) {
+    const byRow = new Map<number, Map<string, string>>();
+
+    for (const row of sheetRows) {
+      if (!byRow.has(row.row_index)) byRow.set(row.row_index, new Map());
+      byRow.get(row.row_index)!.set(row.column_name, row.value);
+    }
+
+    const parsedRows = [...byRow.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, map]) => Object.fromEntries(map));
+
+    if (parsedRows.length < 2) continue;
+
+    const labels = Object.keys(parsedRows[0]).filter((k) => k.toLowerCase() !== "total");
+    for (const label of labels) {
+      const chart = {
+        type: "bar",
+        title: `${label} (${sheetName})`,
+        data: parsedRows.map((r) => ({ name: r[labels[0]], value: Number(r[label]) || 0 })),
+      };
+      charts.push(chart);
+    }
+  }
+
+  return charts;
 }
