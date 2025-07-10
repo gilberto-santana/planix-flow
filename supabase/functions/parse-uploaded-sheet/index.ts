@@ -2,7 +2,7 @@
 
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
-import { readXlsxFile } from "https://esm.sh/read-excel-file@5.7.0";
+import readXlsxFile from "https://esm.sh/read-excel-file@5.7.0";
 
 serve(async (req) => {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
@@ -38,11 +38,14 @@ serve(async (req) => {
     }
 
     const buffer = await data.arrayBuffer();
-    const uint8 = new Uint8Array(buffer);
-    const sheetNames = await readXlsxFile(uint8, { getSheets: true });
+    const uintBuffer = new Uint8Array(buffer);
 
-    for (const sheetName of sheetNames) {
-      const rows = await readXlsxFile(uint8, { sheet: sheetName });
+    const sheets = await readXlsxFile(uintBuffer, { getSheets: true });
+
+    for (const sheet of sheets) {
+      const rows = await readXlsxFile(uintBuffer, { sheet: sheet.name });
+      const sheetName = sheet.name;
+
       const insertPayload = [];
 
       for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -67,7 +70,10 @@ serve(async (req) => {
 
         if (insertError) {
           return new Response(
-            JSON.stringify({ error: "Failed to insert parsed data", details: insertError }),
+            JSON.stringify({
+              error: "Failed to insert parsed data",
+              details: insertError,
+            }),
             { status: 500 }
           );
         }
@@ -76,9 +82,14 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ error: "Unexpected error", details: err.message }), {
-      status: 500,
-    });
+    console.error("❌ Erro inesperado:", err);
+    return new Response(
+      JSON.stringify({
+        error: "Unexpected error",
+        message: err?.message ?? "Sem mensagem",
+        stack: err?.stack ?? "Sem stack",
+      }),
+      { status: 500 }
+    );
   }
 });
