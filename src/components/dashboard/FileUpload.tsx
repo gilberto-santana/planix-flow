@@ -53,6 +53,13 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     onFileUpload(file, fileId, filePath);
   };
 
+  const handleButtonClick = () => {
+    const fileInput = document.querySelector('input[type=file]') as HTMLInputElement;
+    if (fileInput) {
+      fileInput.click();
+    }
+  };
+
   return (
     <Card className={cn("p-4", className)}>
       <CardContent className="flex flex-col items-center gap-4">
@@ -75,7 +82,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
             <span className="text-sm">Falha no envio. Tente novamente.</span>
           </div>
         )}
-        <Button type="button" onClick={() => document.querySelector('input[type=file]')?.click()}>
+        <Button type="button" onClick={handleButtonClick}>
           Selecionar Arquivo
         </Button>
       </CardContent>

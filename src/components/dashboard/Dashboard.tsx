@@ -5,10 +5,23 @@ import { ChartGrid } from "./ChartGrid";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
+interface SpreadsheetRow {
+  row_index: number;
+  column_name: string;
+  value: string;
+  sheet_name: string;
+}
+
+interface ChartData {
+  title: string;
+  type: "bar" | "line" | "pie";
+  data: { name: string; value: number }[];
+}
+
 export function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [charts, setCharts] = useState<any[]>([]);
+  const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
   if (!user) {
@@ -46,7 +59,7 @@ export function Dashboard() {
         return;
       }
 
-      const generatedCharts = generateChartSet(spreadsheetData);
+      const generatedCharts = generateChartSet(spreadsheetData as SpreadsheetRow[]);
       setCharts(generatedCharts);
     } catch (err) {
       console.error("Erro inesperado:", err);
@@ -69,17 +82,17 @@ export function Dashboard() {
   );
 }
 
-function generateChartSet(rows: any[]) {
+function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
   if (!rows || rows.length === 0) return [];
 
-  const bySheet = new Map<string, any[]>();
+  const bySheet = new Map<string, SpreadsheetRow[]>();
 
   for (const row of rows) {
     if (!bySheet.has(row.sheet_name)) bySheet.set(row.sheet_name, []);
     bySheet.get(row.sheet_name)!.push(row);
   }
 
-  const charts: any[] = [];
+  const charts: ChartData[] = [];
 
   for (const [sheetName, sheetRows] of bySheet.entries()) {
     const byRow = new Map<number, Map<string, string>>();
@@ -98,7 +111,7 @@ function generateChartSet(rows: any[]) {
     const labels = Object.keys(parsedRows[0]).filter((k) => k.toLowerCase() !== "total");
 
     for (const label of labels) {
-      const chart = {
+      const chart: ChartData = {
         type: "bar",
         title: `${label} (${sheetName})`,
         data: parsedRows.map((r) => ({
