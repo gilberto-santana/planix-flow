@@ -60,32 +60,34 @@ export function Dashboard() {
         return;
       }
 
-      // Use direct query execution to avoid deep type instantiation
-      const { data, error } = await supabase
+      // Fetch data without type assertions to avoid deep type instantiation
+      const dataResponse = await supabase
         .from("spreadsheet_data")
         .select("*")
         .eq("file_id", fileId)
-        .order("row_index", { ascending: true }) as { data: DatabaseRow[] | null; error: any };
+        .order("row_index", { ascending: true });
 
-      if (error || !data) {
-        console.error("Erro ao buscar dados:", error);
+      if (dataResponse.error || !dataResponse.data) {
+        console.error("Erro ao buscar dados:", dataResponse.error);
         toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
         setLoading(false);
         return;
       }
 
+      const data = dataResponse.data as DatabaseRow[];
+
       // Get sheet names in a separate query
       const sheetIds = [...new Set(data.map(row => row.sheet_id))];
-      const { data: sheetsData, error: sheetsError } = await supabase
+      const sheetsResponse = await supabase
         .from("sheets")
         .select("id, sheet_name")
-        .in("id", sheetIds) as { data: { id: string; sheet_name: string }[] | null; error: any };
+        .in("id", sheetIds);
 
-      if (sheetsError) {
-        console.error("Erro ao buscar sheets:", sheetsError);
+      if (sheetsResponse.error) {
+        console.error("Erro ao buscar sheets:", sheetsResponse.error);
       }
 
-      const sheetsMap = new Map(sheetsData?.map(sheet => [sheet.id, sheet.sheet_name]) || []);
+      const sheetsMap = new Map(sheetsResponse.data?.map(sheet => [sheet.id, sheet.sheet_name]) || []);
 
       const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
