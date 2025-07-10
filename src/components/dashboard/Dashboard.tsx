@@ -5,6 +5,17 @@ import { ChartGrid } from "./ChartGrid";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 
+interface DatabaseRow {
+  row_index: number;
+  column_name: string | null;
+  cell_value: string | null;
+  sheet_id: string;
+  id: string;
+  column_index: number;
+  created_at: string;
+  data_type: string | null;
+}
+
 interface SpreadsheetRow {
   row_index: number;
   column_name: string;
@@ -47,19 +58,34 @@ export function Dashboard() {
         return;
       }
 
-      const { data: spreadsheetData, error: fetchError } = await supabase
+      // Query the spreadsheet data with proper typing
+      const { data: rawData, error: fetchError } = await supabase
         .from("spreadsheet_data")
-        .select("*")
-        .eq("file_id", fileId)
+        .select(`
+          *,
+          sheets!inner(
+            sheet_name,
+            spreadsheet_id
+          )
+        `)
+        .eq("sheets.spreadsheet_id", fileId)
         .order("row_index", { ascending: true });
 
-      if (fetchError || !spreadsheetData) {
+      if (fetchError || !rawData) {
         console.error("Erro ao buscar dados:", fetchError);
         setLoading(false);
         return;
       }
 
-      const generatedCharts = generateChartSet(spreadsheetData as SpreadsheetRow[]);
+      // Transform the data to match our interface
+      const transformedData: SpreadsheetRow[] = rawData.map((row: any) => ({
+        row_index: row.row_index,
+        column_name: row.column_name || '',
+        value: row.cell_value || '',
+        sheet_name: row.sheets.sheet_name
+      }));
+
+      const generatedCharts = generateChartSet(transformedData);
       setCharts(generatedCharts);
     } catch (err) {
       console.error("Erro inesperado:", err);
