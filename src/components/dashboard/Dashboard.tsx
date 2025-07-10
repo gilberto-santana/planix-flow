@@ -1,3 +1,5 @@
+// src/components/dashboard/Dashboard.tsx
+
 import { useState } from "react";
 import { FileUpload } from "./FileUpload";
 import { ChartGrid } from "./ChartGrid";
@@ -11,50 +13,54 @@ export function Dashboard() {
   const [charts, setCharts] = useState<any[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
-    if (!user) return;
+  if (!user) {
+    return <p className="text-muted-foreground">Verificando autenticação do usuário...</p>;
+  }
 
+  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
     setLoading(true);
     setFileName(file.name);
 
-    // Chama a função parse-uploaded-sheet
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/parse-uploaded-sheet`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({
-        filePath,
-        fileId,
-        userId: user.id,
-      }),
-    });
+    try {
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_FUNCTION_URL}/parse-uploaded-sheet`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          filePath,
+          fileId,
+          userId: user.id,
+        }),
+      });
 
-    const result = await response.json();
-    if (!response.ok) {
-      console.error("Erro no parsing:", result.error);
+      const result = await response.json();
+      if (!response.ok) {
+        console.error("Erro no parsing:", result.error);
+        setLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("spreadsheet_data")
+        .select("*")
+        .eq("file_id", fileId)
+        .order("row_index", { ascending: true });
+
+      if (error || !data) {
+        console.error("Erro ao buscar dados:", error);
+        setLoading(false);
+        return;
+      }
+
+      const generatedCharts = generateChartSet(data);
+      setCharts(generatedCharts);
+    } catch (err) {
+      console.error("Erro inesperado:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // Busca os dados processados no Supabase
-    const { data, error } = await supabase
-      .from("spreadsheet_data")
-      .select("*")
-      .eq("file_id", fileId)
-      .order("row_index", { ascending: true });
-
-    if (error || !data) {
-      console.error("Erro ao buscar dados:", error);
-      setLoading(false);
-      return;
-    }
-
-    // Gera os gráficos automaticamente
-    const generatedCharts = generateChartSet(data);
-    setCharts(generatedCharts);
-    setLoading(false);
   };
 
   return (
@@ -71,7 +77,6 @@ export function Dashboard() {
   );
 }
 
-// Lógica simples de geração automática de gráficos (exemplo)
 function generateChartSet(rows: any[]) {
   if (!rows || rows.length === 0) return [];
 
@@ -99,11 +104,15 @@ function generateChartSet(rows: any[]) {
     if (parsedRows.length < 2) continue;
 
     const labels = Object.keys(parsedRows[0]).filter((k) => k.toLowerCase() !== "total");
+
     for (const label of labels) {
       const chart = {
         type: "bar",
         title: `${label} (${sheetName})`,
-        data: parsedRows.map((r) => ({ name: r[labels[0]], value: Number(r[label]) || 0 })),
+        data: parsedRows.map((r) => ({
+          name: r[labels[0]],
+          value: Number(r[label]) || 0,
+        })),
       };
       charts.push(chart);
     }
