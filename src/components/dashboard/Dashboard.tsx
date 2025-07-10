@@ -1,5 +1,3 @@
-
-
 import { useState } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardStats } from "./DashboardStats";
@@ -62,12 +60,14 @@ export function Dashboard() {
         return;
       }
 
-      // Simplified query to avoid deep type instantiation
-      const { data, error } = await supabase
+      // Simplified query with explicit typing to avoid deep type instantiation
+      const query = supabase
         .from("spreadsheet_data")
         .select("row_index, column_name, cell_value, sheet_id, id, column_index, created_at, data_type")
         .eq("file_id", fileId)
         .order("row_index", { ascending: true });
+
+      const { data, error } = await query;
 
       if (error || !data) {
         console.error("Erro ao buscar dados:", error);
@@ -223,4 +223,3 @@ function generateChartSet(rows: SpreadsheetRow[]) {
 
   return charts;
 }
-
