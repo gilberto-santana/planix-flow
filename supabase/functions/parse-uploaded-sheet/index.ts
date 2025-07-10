@@ -2,7 +2,7 @@
 
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
-import readXlsxFile from "https://esm.sh/read-excel-file@5.7.0";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 serve(async (req) => {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
@@ -38,13 +38,15 @@ serve(async (req) => {
     }
 
     const buffer = await data.arrayBuffer();
-    const uintBuffer = new Uint8Array(buffer);
+    const workbook = XLSX.read(buffer, { type: "array" });
 
-    const sheets = await readXlsxFile(uintBuffer, { getSheets: true });
-
-    for (const sheet of sheets) {
-      const rows = await readXlsxFile(uintBuffer, { sheet: sheet.name });
-      const sheetName = sheet.name;
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: false,
+      });
 
       const insertPayload = [];
 
@@ -57,7 +59,7 @@ serve(async (req) => {
             sheet_name: sheetName,
             row_index: rowIndex,
             column_name: `Coluna ${colIndex + 1}`,
-            value: String(row[colIndex] ?? ""),
+            value: String(row[colIndex]),
             created_at: new Date().toISOString(),
           });
         }
