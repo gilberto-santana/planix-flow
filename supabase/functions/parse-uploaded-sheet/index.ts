@@ -38,11 +38,10 @@ serve(async (req) => {
     }
 
     const buffer = await data.arrayBuffer();
-    const workbook = await readXlsxFile(new Uint8Array(buffer), { getSheets: true });
+    const sheets = await readXlsxFile(new Uint8Array(buffer), { getSheets: true });
 
-    for (const sheet of workbook) {
-      const rows = await readXlsxFile(new Uint8Array(buffer), { sheet: sheet.name });
-      const sheetName = sheet.name;
+    for (const sheetName of sheets) {
+      const rows = await readXlsxFile(new Uint8Array(buffer), { sheet: sheetName });
 
       const insertPayload = [];
 
