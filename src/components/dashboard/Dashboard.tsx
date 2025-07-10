@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { DashboardHeader } from "./DashboardHeader";
 import { DashboardStats } from "./DashboardStats";
@@ -60,34 +61,45 @@ export function Dashboard() {
         return;
       }
 
-      // Fetch data without type assertions to avoid deep type instantiation
-      const dataResponse = await supabase
+      // First, get the sheet IDs for this spreadsheet
+      const sheetsQuery = await supabase
+        .from("sheets")
+        .select("id, sheet_name")
+        .eq("spreadsheet_id", fileId);
+
+      if (sheetsQuery.error || !sheetsQuery.data) {
+        console.error("Erro ao buscar sheets:", sheetsQuery.error);
+        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar as abas da planilha." });
+        setLoading(false);
+        return;
+      }
+
+      const sheets = sheetsQuery.data;
+      const sheetIds = sheets.map(sheet => sheet.id);
+
+      if (sheetIds.length === 0) {
+        console.log("Nenhuma aba encontrada para esta planilha");
+        toast({ title: "Aviso", description: "Nenhuma aba foi encontrada nesta planilha." });
+        setLoading(false);
+        return;
+      }
+
+      // Now get the spreadsheet data for these sheets
+      const dataQuery = await supabase
         .from("spreadsheet_data")
         .select("*")
-        .eq("file_id", fileId)
+        .in("sheet_id", sheetIds)
         .order("row_index", { ascending: true });
 
-      if (dataResponse.error || !dataResponse.data) {
-        console.error("Erro ao buscar dados:", dataResponse.error);
+      if (dataQuery.error || !dataQuery.data) {
+        console.error("Erro ao buscar dados:", dataQuery.error);
         toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
         setLoading(false);
         return;
       }
 
-      const data = dataResponse.data as DatabaseRow[];
-
-      // Get sheet names in a separate query
-      const sheetIds = [...new Set(data.map(row => row.sheet_id))];
-      const sheetsResponse = await supabase
-        .from("sheets")
-        .select("id, sheet_name")
-        .in("id", sheetIds);
-
-      if (sheetsResponse.error) {
-        console.error("Erro ao buscar sheets:", sheetsResponse.error);
-      }
-
-      const sheetsMap = new Map(sheetsResponse.data?.map(sheet => [sheet.id, sheet.sheet_name]) || []);
+      const data = dataQuery.data as DatabaseRow[];
+      const sheetsMap = new Map(sheets.map(sheet => [sheet.id, sheet.sheet_name]));
 
       const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
