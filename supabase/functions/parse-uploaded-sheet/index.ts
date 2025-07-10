@@ -38,11 +38,11 @@ serve(async (req) => {
     }
 
     const buffer = await data.arrayBuffer();
-    const sheets = await readXlsxFile(new Uint8Array(buffer), { getSheets: true });
+    const uint8 = new Uint8Array(buffer);
+    const sheetNames = await readXlsxFile(uint8, { getSheets: true });
 
-    for (const sheetName of sheets) {
-      const rows = await readXlsxFile(new Uint8Array(buffer), { sheet: sheetName });
-
+    for (const sheetName of sheetNames) {
+      const rows = await readXlsxFile(uint8, { sheet: sheetName });
       const insertPayload = [];
 
       for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -77,7 +77,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ error: "Unexpected error", details: err }), {
+    return new Response(JSON.stringify({ error: "Unexpected error", details: err.message }), {
       status: 500,
     });
   }
