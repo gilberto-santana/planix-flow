@@ -1,3 +1,4 @@
+
 // src/pages/Index.tsx
 
 import { AuthPage } from "@/components/auth/AuthPage";
@@ -19,7 +20,8 @@ const Index = () => {
     hasSession: !!session,
   });
 
-  if (loading || !initialized || !user) {
+  // Show loading only while loading or not initialized
+  if (loading || !initialized) {
     return (
       <div className="min-h-screen bg-gradient-background flex items-center justify-center">
         <div className="text-center">
