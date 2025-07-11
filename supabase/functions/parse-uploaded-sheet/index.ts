@@ -14,15 +14,26 @@ serve(async (req) => {
     );
   }
 
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405 }
+    );
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
+    const rawBody = await req.text();
+    console.log("📦 Body recebido bruto:", rawBody);
+
     let body;
     try {
-      body = await req.json();
+      body = JSON.parse(rawBody);
     } catch (e) {
+      console.error("❌ JSON malformado:", e);
       return new Response(
-        JSON.stringify({ error: "Corpo da requisição inválido ou ausente" }),
+        JSON.stringify({ error: "Invalid JSON body" }),
         { status: 400 }
       );
     }
@@ -41,6 +52,7 @@ serve(async (req) => {
       .download(filePath);
 
     if (error || !data) {
+      console.error("❌ Erro ao baixar arquivo:", error);
       return new Response(
         JSON.stringify({ error: "Failed to download file from storage" }),
         { status: 500 }
@@ -81,6 +93,7 @@ serve(async (req) => {
           .insert(insertPayload);
 
         if (insertError) {
+          console.error("❌ Erro ao inserir no banco:", insertError);
           return new Response(
             JSON.stringify({
               error: "Failed to insert parsed data",
