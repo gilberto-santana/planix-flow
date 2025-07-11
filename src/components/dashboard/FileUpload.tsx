@@ -24,12 +24,24 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
   const { toast } = useToast();
 
   const handleFileChange = async (file: File) => {
-    if (!file || !user) return;
+    if (!file || !user) {
+      console.error("❌ Arquivo ou usuário ausente:", { hasFile: !!file, hasUser: !!user });
+      return;
+    }
 
-    if (!validateFile(file)) {
+    console.log("📁 Processando arquivo:", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      userId: user.id
+    });
+
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      console.error("❌ Validação do arquivo falhou:", validation.error);
       toast({ 
         title: "Arquivo inválido", 
-        description: "Apenas arquivos .csv ou .xlsx são permitidos.",
+        description: validation.error,
         variant: "destructive"
       });
       return;
@@ -39,33 +51,45 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     const ext = file.name.split('.').pop();
     const filePath = `${user.id}/${fileId}.${ext}`;
 
+    console.log("🚀 Iniciando upload:", { fileId, filePath });
+
     setUploadStatus('uploading');
     setUploadProgress(10);
 
     try {
-      const { error } = await supabase.storage.from('spreadsheets').upload(filePath, file);
+      // Upload file to storage
+      const { error: uploadError } = await supabase.storage
+        .from('spreadsheets')
+        .upload(filePath, file);
 
-      if (error) {
-        console.error(error);
+      if (uploadError) {
+        console.error("❌ Erro no upload do arquivo:", uploadError);
         setUploadStatus('error');
         toast({ 
           title: "Erro no upload", 
-          description: error.message,
+          description: uploadError.message,
           variant: "destructive"
         });
         return;
       }
 
+      console.log("✅ Upload do arquivo concluído");
+      setUploadProgress(50);
+
+      // Trigger file processing
       setUploadProgress(100);
       setUploadStatus('success');
       setUploadedFile(file);
+      
+      console.log("🔄 Chamando onFileUpload...");
       onFileUpload(file, fileId, filePath);
+
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('❌ Erro inesperado no upload:', error);
       setUploadStatus('error');
       toast({ 
         title: "Erro no upload", 
-        description: "Falha inesperada durante o upload.",
+        description: `Falha inesperada durante o upload: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: "destructive"
       });
     }
@@ -142,7 +166,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                     ou clique para selecionar um arquivo
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Formatos suportados: .csv, .xlsx, .xls
+                    Formatos suportados: .csv, .xlsx, .xls (máx. 10MB)
                   </p>
                 </div>
                 <Button type="button" variant="outline">
@@ -158,7 +182,10 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                   <Upload className="w-8 h-8 text-primary animate-bounce" />
                 </div>
                 <div className="space-y-2">
-                  <h3 className="text-lg font-medium">Fazendo upload...</h3>
+                  <h3 className="text-lg font-medium">Processando planilha...</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Fazendo upload e processando dados
+                  </p>
                   <Progress value={uploadProgress} className="w-full" />
                 </div>
               </>
@@ -174,7 +201,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                     Upload concluído!
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {uploadedFile.name} foi enviado com sucesso
+                    {uploadedFile.name} foi processado com sucesso
                   </p>
                   <Button 
                     type="button" 
@@ -195,7 +222,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-lg font-medium text-red-600">
-                    Falha no upload
+                    Falha no processamento
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     Tente novamente ou escolha outro arquivo
