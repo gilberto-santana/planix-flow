@@ -72,21 +72,24 @@ export function useFileProcessing() {
           throw new Error("Request body is empty after serialization");
         }
 
-        // Call the edge function with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
-
+        // Call the edge function with 60 second timeout using Promise.race
         console.log("📤 Enviando para Edge Function...");
         
-        const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Function call timeout after 60 seconds')), 60000);
+        });
+
+        const functionPromise = supabase.functions.invoke("parse-uploaded-sheet", {
           body: requestBody,
           headers: {
             "Content-Type": "application/json",
-          },
-          signal: controller.signal
+          }
         });
 
-        clearTimeout(timeoutId);
+        const { data: result, error: invokeError } = await Promise.race([
+          functionPromise,
+          timeoutPromise.then(() => ({ data: null, error: new Error('Timeout') }))
+        ]) as any;
 
         console.log("📊 Resposta da Edge Function (tentativa", attempt + "):", { 
           result, 
