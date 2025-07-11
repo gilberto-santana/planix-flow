@@ -17,7 +17,17 @@ serve(async (req) => {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const { filePath, fileId, userId } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: "Corpo da requisição inválido ou ausente" }),
+        { status: 400 }
+      );
+    }
+
+    const { filePath, fileId, userId } = body;
 
     if (!filePath || !fileId || !userId) {
       return new Response(
