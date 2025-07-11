@@ -8,6 +8,7 @@ serve(async (req) => {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("❌ Credenciais Supabase ausentes.");
     return new Response(
       JSON.stringify({ error: "Missing Supabase credentials" }),
       { status: 500 }
@@ -16,42 +17,37 @@ serve(async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+  let body;
   try {
-    if (!req.body) {
-      return new Response(
-        JSON.stringify({ error: "Missing request body" }),
-        { status: 400 }
-      );
-    }
+    body = await req.json();
+  } catch (jsonError) {
+    console.error("❌ Erro ao fazer parse do JSON:", jsonError);
+    return new Response(
+      JSON.stringify({
+        error: "Invalid JSON in request body",
+        details: jsonError?.message ?? "Sem mensagem",
+      }),
+      { status: 400 }
+    );
+  }
 
-    let filePath = "";
-    let fileId = "";
-    let userId = "";
+  const { filePath, fileId, userId } = body;
 
-    try {
-      const jsonBody = await req.json();
-      filePath = jsonBody?.filePath ?? "";
-      fileId = jsonBody?.fileId ?? "";
-      userId = jsonBody?.userId ?? "";
-    } catch (jsonErr) {
-      return new Response(
-        JSON.stringify({ error: "Invalid JSON body", details: jsonErr.message }),
-        { status: 400 }
-      );
-    }
+  if (!filePath || !fileId || !userId) {
+    console.error("❌ Parâmetros ausentes:", { filePath, fileId, userId });
+    return new Response(
+      JSON.stringify({ error: "Missing filePath, fileId or userId" }),
+      { status: 400 }
+    );
+  }
 
-    if (!filePath || !fileId || !userId) {
-      return new Response(
-        JSON.stringify({ error: "Missing filePath, fileId or userId" }),
-        { status: 400 }
-      );
-    }
-
+  try {
     const { data, error } = await supabase.storage
       .from("spreadsheets")
       .download(filePath);
 
     if (error || !data) {
+      console.error("❌ Erro ao baixar arquivo:", error);
       return new Response(
         JSON.stringify({ error: "Failed to download file from storage" }),
         { status: 500 }
@@ -92,6 +88,7 @@ serve(async (req) => {
           .insert(insertPayload);
 
         if (insertError) {
+          console.error("❌ Erro ao inserir dados:", insertError);
           return new Response(
             JSON.stringify({
               error: "Failed to insert parsed data",
