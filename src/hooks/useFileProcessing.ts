@@ -34,39 +34,44 @@ export function useFileProcessing() {
       return;
     }
 
-    console.log("🚀 Iniciando upload de arquivo:", { 
+    console.log("🚀 Iniciando processamento:", { 
       fileName: file.name, 
       fileId, 
       filePath, 
-      fileSize: file.size 
+      fileSize: file.size,
+      userId: user.id
     });
 
     setLoading(true);
     setFileName(file.name);
 
     try {
-      // Call the edge function with all required data
+      const requestBody = {
+        filePath,
+        fileId,
+        userId: user.id,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      };
+
+      console.log("📤 Enviando para Edge Function:", requestBody);
+
+      // Call the edge function
       const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
-        body: {
-          filePath,
-          fileId,
-          userId: user.id,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type
-        },
+        body: requestBody,
         headers: {
           "Content-Type": "application/json",
         },
       });
 
-      console.log("📊 Resposta da edge function:", result);
+      console.log("📊 Resposta da Edge Function:", { result, error: invokeError });
 
       if (invokeError) {
         console.error("❌ Erro ao invocar função:", invokeError);
         toast({ 
           title: "Erro ao processar", 
-          description: `Não foi possível processar a planilha: ${invokeError.message}`,
+          description: `Falha na comunicação com o servidor: ${invokeError.message}`,
           variant: "destructive"
         });
         setLoading(false);
@@ -75,21 +80,23 @@ export function useFileProcessing() {
 
       if (!result?.success) {
         console.error("❌ Processamento falhou:", result);
+        const errorMessage = result?.error || result?.message || "Erro desconhecido durante o processamento";
         toast({ 
           title: "Erro no processamento", 
-          description: result?.error || "Erro desconhecido durante o processamento",
+          description: errorMessage,
           variant: "destructive"
         });
         setLoading(false);
         return;
       }
 
-      console.log("✅ Arquivo processado com sucesso, buscando dados...");
+      console.log("✅ Processamento concluído, aguardando consistência do banco...");
 
-      // Wait a moment for database consistency
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Wait for database consistency
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Query the spreadsheet data
+      // Query the sheets data
+      console.log("🔍 Buscando abas da planilha...");
       const sheetsQuery = await supabase
         .from("sheets")
         .select("id, sheet_name")
@@ -108,10 +115,10 @@ export function useFileProcessing() {
       }
 
       const sheets = sheetsQuery.data || [];
-      console.log("📄 Abas encontradas:", sheets);
+      console.log("📄 Abas encontradas:", sheets.length);
 
       if (sheets.length === 0) {
-        console.log("⚠️ Nenhuma aba encontrada para esta planilha");
+        console.log("⚠️ Nenhuma aba encontrada");
         toast({ 
           title: "Aviso", 
           description: "Nenhuma aba foi encontrada nesta planilha.",
@@ -124,6 +131,7 @@ export function useFileProcessing() {
       const sheetIds = sheets.map(sheet => sheet.id);
 
       // Query the spreadsheet data
+      console.log("🔍 Buscando dados das células...");
       const dataQuery = await supabase
         .from("spreadsheet_data")
         .select("*")
@@ -146,7 +154,7 @@ export function useFileProcessing() {
       console.log("📊 Dados encontrados:", data.length, "células");
 
       if (data.length === 0) {
-        console.log("⚠️ Nenhum dado encontrado na planilha");
+        console.log("⚠️ Nenhum dado encontrado");
         toast({ 
           title: "Aviso", 
           description: "Nenhum dado foi encontrado na planilha.",
@@ -156,7 +164,7 @@ export function useFileProcessing() {
         return;
       }
 
-      // Create sheets map for lookup
+      // Create sheets map
       const sheetsMap = new Map(sheets.map(sheet => [sheet.id, sheet.sheet_name]));
 
       // Normalize data for chart generation
@@ -185,7 +193,7 @@ export function useFileProcessing() {
       console.error("❌ Erro no processamento:", error);
       toast({ 
         title: "Erro", 
-        description: `Erro inesperado durante o processamento: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        description: `Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: "destructive"
       });
       setLoading(false);
