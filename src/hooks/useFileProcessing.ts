@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,11 +30,11 @@ export function useFileProcessing() {
 
     try {
       const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
-        body: {
+        body: JSON.stringify({
           filePath,
           fileId,
           userId: user.id,
-        },
+        }),
       });
 
       if (invokeError) {
@@ -45,7 +44,6 @@ export function useFileProcessing() {
         return;
       }
 
-      // First, get the sheet IDs for this spreadsheet
       const sheetsQuery = await supabase
         .from("sheets")
         .select("id, sheet_name")
@@ -68,7 +66,6 @@ export function useFileProcessing() {
         return;
       }
 
-      // Now get the spreadsheet data for these sheets
       const dataQuery = await supabase
         .from("spreadsheet_data")
         .select("*")
