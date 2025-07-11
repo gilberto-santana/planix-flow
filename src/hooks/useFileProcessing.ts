@@ -30,11 +30,14 @@ export function useFileProcessing() {
 
     try {
       const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
-        body: JSON.stringify({
+        body: {
           filePath,
           fileId,
           userId: user.id,
-        }),
+        },
+        headers: {
+          "Content-Type": "application/json",
+        },
       });
 
       if (invokeError) {
@@ -92,10 +95,10 @@ export function useFileProcessing() {
       const generatedCharts = generateChartSet(normalized);
       setCharts(generatedCharts);
       setLoading(false);
-      
-      toast({ 
-        title: "Planilha processada com sucesso!", 
-        description: `${generatedCharts.length} gráficos foram gerados.` 
+
+      toast({
+        title: "Planilha processada com sucesso!",
+        description: `${generatedCharts.length} gráficos foram gerados.`
       });
     } catch (error) {
       console.error("Erro no processamento:", error);
