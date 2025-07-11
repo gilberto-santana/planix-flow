@@ -1,115 +1,113 @@
-// supabase/functions/parse-uploaded-sheet/index.ts
+import { useState } from "react";
+import { useAuth } from "./useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "./use-toast";
+import { generateChartSet, ChartData, SpreadsheetRow } from "@/utils/chartGeneration";
 
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+interface DatabaseRow {
+  row_index: number;
+  column_name: string | null;
+  cell_value: string | null;
+  sheet_id: string;
+  id: string;
+  column_index: number;
+  created_at: string;
+  data_type: string | null;
+}
 
-serve(async (req) => {
-  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
+export function useFileProcessing() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [charts, setCharts] = useState<ChartData[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("❌ Credenciais Supabase ausentes.");
-    return new Response(
-      JSON.stringify({ error: "Missing Supabase credentials" }),
-      { status: 500 }
-    );
-  }
+  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+    if (!user) return;
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    setLoading(true);
+    setFileName(file.name);
 
-  let body;
-  try {
-    body = await req.json();
-  } catch (jsonError) {
-    console.error("❌ Erro ao fazer parse do JSON:", jsonError);
-    return new Response(
-      JSON.stringify({
-        error: "Invalid JSON in request body",
-        details: jsonError?.message ?? "Sem mensagem",
-      }),
-      { status: 400 }
-    );
-  }
-
-  const { filePath, fileId, userId } = body;
-
-  if (!filePath || !fileId || !userId) {
-    console.error("❌ Parâmetros ausentes:", { filePath, fileId, userId });
-    return new Response(
-      JSON.stringify({ error: "Missing filePath, fileId or userId" }),
-      { status: 400 }
-    );
-  }
-
-  try {
-    const { data, error } = await supabase.storage
-      .from("spreadsheets")
-      .download(filePath);
-
-    if (error || !data) {
-      console.error("❌ Erro ao baixar arquivo:", error);
-      return new Response(
-        JSON.stringify({ error: "Failed to download file from storage" }),
-        { status: 500 }
-      );
-    }
-
-    const buffer = await data.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const rows: any[][] = XLSX.utils.sheet_to_json(sheet, {
-        header: 1,
-        defval: "",
-        raw: false,
+    try {
+      const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+        body: {
+          filePath,
+          fileId,
+          userId: user.id,
+        },
       });
 
-      const insertPayload = [];
-
-      for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-        const row = rows[rowIndex];
-        for (let colIndex = 0; colIndex < row.length; colIndex++) {
-          insertPayload.push({
-            user_id: userId,
-            file_id: fileId,
-            sheet_name: sheetName,
-            row_index: rowIndex,
-            column_name: `Coluna ${colIndex + 1}`,
-            value: String(row[colIndex]),
-            created_at: new Date().toISOString(),
-          });
-        }
+      if (invokeError) {
+        console.error("Erro ao invocar função:", invokeError);
+        toast({ title: "Erro ao processar", description: "Não foi possível processar a planilha." });
+        setLoading(false);
+        return;
       }
 
-      if (insertPayload.length > 0) {
-        const { error: insertError } = await supabase
-          .from("spreadsheet_data")
-          .insert(insertPayload);
+      const sheetsQuery = await supabase
+        .from("sheets")
+        .select("id, sheet_name")
+        .eq("spreadsheet_id", fileId);
 
-        if (insertError) {
-          console.error("❌ Erro ao inserir dados:", insertError);
-          return new Response(
-            JSON.stringify({
-              error: "Failed to insert parsed data",
-              details: insertError,
-            }),
-            { status: 500 }
-          );
-        }
+      if (sheetsQuery.error || !sheetsQuery.data) {
+        console.error("Erro ao buscar sheets:", sheetsQuery.error);
+        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar as abas da planilha." });
+        setLoading(false);
+        return;
       }
+
+      const sheets = sheetsQuery.data;
+      const sheetIds = sheets.map(sheet => sheet.id);
+
+      if (sheetIds.length === 0) {
+        console.log("Nenhuma aba encontrada para esta planilha");
+        toast({ title: "Aviso", description: "Nenhuma aba foi encontrada nesta planilha." });
+        setLoading(false);
+        return;
+      }
+
+      const dataQuery = await supabase
+        .from("spreadsheet_data")
+        .select("*")
+        .in("sheet_id", sheetIds)
+        .order("row_index", { ascending: true });
+
+      if (dataQuery.error || !dataQuery.data) {
+        console.error("Erro ao buscar dados:", dataQuery.error);
+        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
+        setLoading(false);
+        return;
+      }
+
+      const data = dataQuery.data as DatabaseRow[];
+      const sheetsMap = new Map(sheets.map(sheet => [sheet.id, sheet.sheet_name]));
+
+      const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
+        row_index: row.row_index,
+        column_name: row.column_name || "",
+        value: row.cell_value || "",
+        sheet_name: sheetsMap.get(row.sheet_id) || "Aba",
+      }));
+
+      const generatedCharts = generateChartSet(normalized);
+      setCharts(generatedCharts);
+      setLoading(false);
+
+      toast({
+        title: "Planilha processada com sucesso!",
+        description: `${generatedCharts.length} gráficos foram gerados.`
+      });
+    } catch (error) {
+      console.error("Erro no processamento:", error);
+      toast({ title: "Erro", description: "Erro inesperado durante o processamento." });
+      setLoading(false);
     }
+  };
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (err) {
-    console.error("❌ Erro inesperado:", err);
-    return new Response(
-      JSON.stringify({
-        error: "Unexpected error",
-        message: err?.message ?? "Sem mensagem",
-        stack: err?.stack ?? "Sem stack",
-      }),
-      { status: 500 }
-    );
-  }
-});
+  return {
+    loading,
+    charts,
+    fileName,
+    handleFileUpload,
+  };
+}
