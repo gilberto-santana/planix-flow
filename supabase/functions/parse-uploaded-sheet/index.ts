@@ -1,3 +1,5 @@
+// src/hooks/useFileProcessing.ts
+
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,11 +32,11 @@ export function useFileProcessing() {
 
     try {
       const { data: result, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
-        body: {
+        body: JSON.stringify({
           filePath,
           fileId,
           userId: user.id,
-        },
+        }),
       });
 
       if (invokeError) {
@@ -60,7 +62,6 @@ export function useFileProcessing() {
       const sheetIds = sheets.map(sheet => sheet.id);
 
       if (sheetIds.length === 0) {
-        console.log("Nenhuma aba encontrada para esta planilha");
         toast({ title: "Aviso", description: "Nenhuma aba foi encontrada nesta planilha." });
         setLoading(false);
         return;
