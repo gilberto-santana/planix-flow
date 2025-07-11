@@ -14,31 +14,31 @@ serve(async (req) => {
     );
   }
 
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405 }
-    );
-  }
-
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const rawBody = await req.text();
-    console.log("📦 Body recebido bruto:", rawBody);
-
-    let body;
-    try {
-      body = JSON.parse(rawBody);
-    } catch (e) {
-      console.error("❌ JSON malformado:", e);
+    if (!req.body) {
       return new Response(
-        JSON.stringify({ error: "Invalid JSON body" }),
+        JSON.stringify({ error: "Missing request body" }),
         { status: 400 }
       );
     }
 
-    const { filePath, fileId, userId } = body;
+    let filePath = "";
+    let fileId = "";
+    let userId = "";
+
+    try {
+      const jsonBody = await req.json();
+      filePath = jsonBody?.filePath ?? "";
+      fileId = jsonBody?.fileId ?? "";
+      userId = jsonBody?.userId ?? "";
+    } catch (jsonErr) {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body", details: jsonErr.message }),
+        { status: 400 }
+      );
+    }
 
     if (!filePath || !fileId || !userId) {
       return new Response(
@@ -52,7 +52,6 @@ serve(async (req) => {
       .download(filePath);
 
     if (error || !data) {
-      console.error("❌ Erro ao baixar arquivo:", error);
       return new Response(
         JSON.stringify({ error: "Failed to download file from storage" }),
         { status: 500 }
@@ -93,7 +92,6 @@ serve(async (req) => {
           .insert(insertPayload);
 
         if (insertError) {
-          console.error("❌ Erro ao inserir no banco:", insertError);
           return new Response(
             JSON.stringify({
               error: "Failed to insert parsed data",
