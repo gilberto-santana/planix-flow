@@ -20,6 +20,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -39,6 +40,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     const validation = validateFile(file);
     if (!validation.valid) {
       console.error("❌ Validação falhou:", validation.error);
+      setErrorDetails(validation.error);
       toast({ 
         title: "Arquivo inválido", 
         description: validation.error,
@@ -56,10 +58,13 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
 
     setUploadStatus('uploading');
     setUploadProgress(10);
+    setErrorDetails(null);
 
     try {
-      // Upload file to storage
+      // Upload file to storage with progress tracking
       console.log("📤 Fazendo upload para storage...");
+      setUploadProgress(25);
+
       const { error: uploadError } = await supabase.storage
         .from('spreadsheets')
         .upload(filePath, file, {
@@ -70,6 +75,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
       if (uploadError) {
         console.error("❌ Erro no upload:", uploadError);
         setUploadStatus('error');
+        setErrorDetails(`Erro no upload: ${uploadError.message}`);
         toast({ 
           title: "Erro no upload", 
           description: uploadError.message,
@@ -81,17 +87,50 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
       console.log("✅ Upload concluído");
       setUploadProgress(50);
 
-      // Verify file was uploaded
+      // Verify file was uploaded with retries
       console.log("🔍 Verificando arquivo no storage...");
-      const { data: fileExists, error: checkError } = await supabase.storage
-        .from('spreadsheets')
-        .list(user.id, {
-          search: `${fileId}.${ext}`
-        });
+      let verificationAttempts = 0;
+      const maxVerificationAttempts = 5;
+      let fileExists = false;
 
-      if (checkError || !fileExists || fileExists.length === 0) {
-        console.error("❌ Arquivo não encontrado após upload:", checkError);
+      while (verificationAttempts < maxVerificationAttempts && !fileExists) {
+        verificationAttempts++;
+        console.log(`🔍 Tentativa de verificação ${verificationAttempts}/${maxVerificationAttempts}`);
+
+        const { data: fileList, error: checkError } = await supabase.storage
+          .from('spreadsheets')
+          .list(user.id, {
+            search: `${fileId}.${ext}`
+          });
+
+        if (checkError) {
+          console.error("❌ Erro ao verificar arquivo:", checkError);
+          
+          if (verificationAttempts >= maxVerificationAttempts) {
+            setUploadStatus('error');
+            setErrorDetails(`Erro na verificação: ${checkError.message}`);
+            toast({ 
+              title: "Erro no upload", 
+              description: "Falha ao verificar o arquivo",
+              variant: "destructive"
+            });
+            return;
+          }
+        } else if (fileList && fileList.length > 0) {
+          fileExists = true;
+          console.log("✅ Arquivo verificado no storage");
+        } else {
+          console.log(`⏳ Arquivo não encontrado ainda, tentativa ${verificationAttempts}`);
+          if (verificationAttempts < maxVerificationAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          }
+        }
+      }
+
+      if (!fileExists) {
+        console.error("❌ Arquivo não foi encontrado após múltiplas verificações");
         setUploadStatus('error');
+        setErrorDetails("Arquivo não foi salvo corretamente");
         toast({ 
           title: "Erro no upload", 
           description: "Arquivo não foi salvo corretamente",
@@ -100,7 +139,27 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
         return;
       }
 
-      console.log("✅ Arquivo verificado no storage");
+      setUploadProgress(75);
+
+      // Test storage access
+      console.log("🧪 Testando acesso ao arquivo...");
+      const { data: testDownload, error: testError } = await supabase.storage
+        .from('spreadsheets')
+        .download(filePath);
+
+      if (testError || !testDownload) {
+        console.error("❌ Erro no teste de acesso:", testError);
+        setUploadStatus('error');
+        setErrorDetails(`Arquivo não acessível: ${testError?.message || 'Dados vazios'}`);
+        toast({ 
+          title: "Erro no upload", 
+          description: "Arquivo carregado mas não acessível",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log("✅ Arquivo acessível, tamanho:", testDownload.size);
       setUploadProgress(100);
       setUploadStatus('success');
       setUploadedFile(file);
@@ -111,9 +170,11 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     } catch (error) {
       console.error('❌ Erro inesperado:', error);
       setUploadStatus('error');
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      setErrorDetails(errorMessage);
       toast({ 
         title: "Erro no upload", 
-        description: `Falha inesperada: ${error instanceof Error ? error.message : 'Erro desconhecido'}`,
+        description: `Falha inesperada: ${errorMessage}`,
         variant: "destructive"
       });
     }
@@ -154,6 +215,7 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
     setUploadStatus('idle');
     setUploadProgress(0);
     setUploadedFile(null);
+    setErrorDetails(null);
   };
 
   return (
@@ -254,6 +316,11 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                   <p className="text-sm text-muted-foreground">
                     Tente novamente ou escolha outro arquivo
                   </p>
+                  {errorDetails && (
+                    <p className="text-xs text-red-600 bg-red-50 p-2 rounded">
+                      {errorDetails}
+                    </p>
+                  )}
                   <Button 
                     type="button" 
                     variant="outline" 
