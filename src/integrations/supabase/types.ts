@@ -202,7 +202,15 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      view_spreadsheet_summary: {
+        Row: {
+          total_cells: number | null
+          total_sheets: number | null
+          total_spreadsheets: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       handle_new_user: {
