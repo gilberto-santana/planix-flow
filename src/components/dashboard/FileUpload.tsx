@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,8 +6,8 @@ import { Upload, FileCheck2, AlertTriangle, File } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { validateFile } from "@/utils/fileValidation";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { generateUniqueFileName } from "@/utils/fileNameGenerator";
 
 interface FileUploadProps {
   onFileUpload: (file: File, fileId: string, filePath: string) => void;
@@ -50,121 +49,22 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
       return;
     }
 
-    const fileId = crypto.randomUUID();
-    const ext = file.name.split('.').pop();
-    const filePath = `${user.id}/${fileId}.${ext}`;
+    const { fileId, filePath } = generateUniqueFileName(file.name, user.id);
 
-    console.log("🚀 Iniciando upload:", { fileId, filePath });
+    console.log("🚀 Iniciando upload:", { fileId, filePath, fileName: file.name });
 
     setUploadStatus('uploading');
     setUploadProgress(10);
     setErrorDetails(null);
 
     try {
-      // Upload file to storage with progress tracking
-      console.log("📤 Fazendo upload para storage...");
-      setUploadProgress(25);
-
-      const { error: uploadError } = await supabase.storage
-        .from('spreadsheets')
-        .upload(filePath, file, {
-          contentType: file.type,
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error("❌ Erro no upload:", uploadError);
-        setUploadStatus('error');
-        setErrorDetails(`Erro no upload: ${uploadError.message}`);
-        toast({ 
-          title: "Erro no upload", 
-          description: uploadError.message,
-          variant: "destructive"
-        });
-        return;
-      }
-
-      console.log("✅ Upload concluído");
-      setUploadProgress(50);
-
-      // Verify file was uploaded with retries
-      console.log("🔍 Verificando arquivo no storage...");
-      let verificationAttempts = 0;
-      const maxVerificationAttempts = 5;
-      let fileExists = false;
-
-      while (verificationAttempts < maxVerificationAttempts && !fileExists) {
-        verificationAttempts++;
-        console.log(`🔍 Tentativa de verificação ${verificationAttempts}/${maxVerificationAttempts}`);
-
-        const { data: fileList, error: checkError } = await supabase.storage
-          .from('spreadsheets')
-          .list(user.id, {
-            search: `${fileId}.${ext}`
-          });
-
-        if (checkError) {
-          console.error("❌ Erro ao verificar arquivo:", checkError);
-          
-          if (verificationAttempts >= maxVerificationAttempts) {
-            setUploadStatus('error');
-            setErrorDetails(`Erro na verificação: ${checkError.message}`);
-            toast({ 
-              title: "Erro no upload", 
-              description: "Falha ao verificar o arquivo",
-              variant: "destructive"
-            });
-            return;
-          }
-        } else if (fileList && fileList.length > 0) {
-          fileExists = true;
-          console.log("✅ Arquivo verificado no storage");
-        } else {
-          console.log(`⏳ Arquivo não encontrado ainda, tentativa ${verificationAttempts}`);
-          if (verificationAttempts < maxVerificationAttempts) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-          }
-        }
-      }
-
-      if (!fileExists) {
-        console.error("❌ Arquivo não foi encontrado após múltiplas verificações");
-        setUploadStatus('error');
-        setErrorDetails("Arquivo não foi salvo corretamente");
-        toast({ 
-          title: "Erro no upload", 
-          description: "Arquivo não foi salvo corretamente",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      setUploadProgress(75);
-
-      // Test storage access
-      console.log("🧪 Testando acesso ao arquivo...");
-      const { data: testDownload, error: testError } = await supabase.storage
-        .from('spreadsheets')
-        .download(filePath);
-
-      if (testError || !testDownload) {
-        console.error("❌ Erro no teste de acesso:", testError);
-        setUploadStatus('error');
-        setErrorDetails(`Arquivo não acessível: ${testError?.message || 'Dados vazios'}`);
-        toast({ 
-          title: "Erro no upload", 
-          description: "Arquivo carregado mas não acessível",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      console.log("✅ Arquivo acessível, tamanho:", testDownload.size);
       setUploadProgress(100);
       setUploadStatus('success');
       setUploadedFile(file);
+
+      console.log("✅ Iniciando processamento do arquivo");
       
-      console.log("🔄 Iniciando processamento...");
+      // Call the upload handler immediately - it will handle all the upload logic
       onFileUpload(file, fileId, filePath);
 
     } catch (error) {
@@ -287,10 +187,10 @@ export function FileUpload({ onFileUpload, className }: FileUploadProps) {
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-lg font-medium text-green-600">
-                    Upload concluído!
+                    Arquivo selecionado!
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {uploadedFile.name} foi enviado e está sendo processado
+                    {uploadedFile.name} está sendo processado
                   </p>
                   <Button 
                     type="button" 

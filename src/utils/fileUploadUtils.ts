@@ -11,13 +11,21 @@ export async function uploadFileToStorage(
   filePath: string,
   userId: string
 ): Promise<FileUploadResult> {
-  console.log("📤 Fazendo upload para storage...");
+  console.log("📤 Fazendo upload para storage...", { filePath, fileName: file.name, fileSize: file.size });
+  
+  // First, try to remove existing file if it exists to avoid conflicts
+  try {
+    await supabase.storage.from('spreadsheets').remove([filePath]);
+    console.log("🗑️ Arquivo existente removido");
+  } catch (removeError) {
+    console.log("ℹ️ Nenhum arquivo existente encontrado para remover");
+  }
   
   const { error: uploadError } = await supabase.storage
     .from('spreadsheets')
     .upload(filePath, file, {
       contentType: file.type,
-      upsert: false
+      upsert: true
     });
 
   if (uploadError) {
@@ -25,56 +33,49 @@ export async function uploadFileToStorage(
     return { success: false, error: `Erro no upload: ${uploadError.message}` };
   }
 
-  console.log("✅ Upload concluído");
+  console.log("✅ Upload concluído com sucesso");
   return { success: true };
 }
 
 export async function verifyFileInStorage(
   filePath: string,
   userId: string,
-  maxAttempts: number = 5
+  maxAttempts: number = 3
 ): Promise<FileUploadResult> {
-  console.log("🔍 Verificando arquivo no storage...");
+  console.log("🔍 Verificando arquivo no storage...", { filePath });
   
-  const fileId = filePath.split('/')[1].split('.')[0];
-  const ext = filePath.split('.').pop();
-  
-  let verificationAttempts = 0;
-  let fileExists = false;
+  // Simplified verification - just try to download the file
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`🔍 Tentativa de verificação ${attempt}/${maxAttempts}`);
 
-  while (verificationAttempts < maxAttempts && !fileExists) {
-    verificationAttempts++;
-    console.log(`🔍 Tentativa de verificação ${verificationAttempts}/${maxAttempts}`);
+    try {
+      const { data, error } = await supabase.storage
+        .from('spreadsheets')
+        .download(filePath);
 
-    const { data: fileList, error: checkError } = await supabase.storage
-      .from('spreadsheets')
-      .list(userId, {
-        search: `${fileId}.${ext}`
-      });
-
-    if (checkError) {
-      console.error("❌ Erro ao verificar arquivo:", checkError);
-      
-      if (verificationAttempts >= maxAttempts) {
-        return { success: false, error: `Erro na verificação: ${checkError.message}` };
+      if (error) {
+        console.error("❌ Erro ao verificar arquivo:", error);
+        if (attempt === maxAttempts) {
+          return { success: false, error: `Erro na verificação: ${error.message}` };
+        }
+      } else if (data && data.size > 0) {
+        console.log("✅ Arquivo verificado no storage, tamanho:", data.size);
+        return { success: true };
       }
-    } else if (fileList && fileList.length > 0) {
-      fileExists = true;
-      console.log("✅ Arquivo verificado no storage");
-    } else {
-      console.log(`⏳ Arquivo não encontrado ainda, tentativa ${verificationAttempts}`);
-      if (verificationAttempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error("❌ Erro na verificação:", error);
+      if (attempt === maxAttempts) {
+        return { success: false, error: "Falha na verificação do arquivo" };
       }
+    }
+
+    if (attempt < maxAttempts) {
+      console.log("⏳ Aguardando antes da próxima tentativa...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
   }
 
-  if (!fileExists) {
-    console.error("❌ Arquivo não foi encontrado após múltiplas verificações");
-    return { success: false, error: "Arquivo não foi salvo corretamente" };
-  }
-
-  return { success: true };
+  return { success: false, error: "Arquivo não foi encontrado após verificações" };
 }
 
 export async function testFileAccess(filePath: string): Promise<FileUploadResult> {
