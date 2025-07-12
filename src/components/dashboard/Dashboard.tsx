@@ -6,7 +6,7 @@ import { ChartsSection } from "./ChartsSection";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 
 export function Dashboard() {
-  const { loading, charts, fileName, handleFileUpload } = useFileProcessing();
+  const { loading, charts, fileName } = useFileProcessing();
 
   return (
     <div className="min-h-screen bg-background">
@@ -29,7 +29,7 @@ export function Dashboard() {
         {/* File Upload Section */}
         <div className="space-y-4">
           <h2 className="text-2xl font-semibold">Upload de Planilha</h2>
-          <FileUpload onFileUpload={handleFileUpload} />
+          <FileUpload />
         </div>
 
         {/* Charts Section */}
