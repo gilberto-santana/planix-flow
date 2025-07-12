@@ -1,44 +1,24 @@
-// src/utils/edgeFunctionUtils.ts
-
-import { supabase } from "@/integrations/supabase/client";
-
-interface ParseUploadedSheetParams {
-  fileId: string;
-  userId: string;
-  filePath: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-}
-
-export async function callParseUploadedSheetFunction({
-  fileId,
-  userId,
-  filePath,
-  fileName,
-  fileSize,
-  fileType,
-}: ParseUploadedSheetParams) {
+export async function invokeEdgeFunction<T>(
+  functionName: string,
+  payload: Record<string, any>
+): Promise<{ data: T | null; error: string | null }> {
   try {
-    const requestBody = {
-      fileId,
-      userId,
-      filePath,
-      fileName,
-      fileSize,
-      fileType,
-    };
-
-    const { data, error } = await supabase.functions.invoke("parse-uploaded-sheet", {
-      body: JSON.stringify(requestBody),
+    const response = await fetch(`/functions/v1/${functionName}`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      body: JSON.stringify(payload),
     });
 
-    return { data, error };
-  } catch (error) {
-    console.error("Erro ao chamar função parse-uploaded-sheet:", error);
-    return { data: null, error };
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { data: null, error: `Erro ${response.status}: ${errorText}` };
+    }
+
+    const data = await response.json();
+    return { data, error: null };
+  } catch (err: any) {
+    return { data: null, error: err.message || "Erro desconhecido" };
   }
 }
