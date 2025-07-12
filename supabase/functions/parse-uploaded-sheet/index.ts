@@ -33,7 +33,6 @@ serve(async (req) => {
     const arrayBuffer = await response.arrayBuffer();
     const workbook = xlsx.read(arrayBuffer, { type: 'array' });
 
-    // Inserir na tabela spreadsheets com todos os campos obrigatórios
     const { data: spreadsheet, error: spreadsheetError } = await supabase
       .from('spreadsheets')
       .insert({
@@ -63,12 +62,12 @@ serve(async (req) => {
         blankrows: false,
       });
 
-      // Corrigido: uso de sheet_name
       const { data: sheet, error: sheetError } = await supabase
         .from('sheets')
         .insert({
           spreadsheet_id: spreadsheetId,
           sheet_name: sheetName,
+          user_id: userId, // ✅ inserido aqui
         })
         .select()
         .single();
@@ -83,7 +82,6 @@ serve(async (req) => {
 
       for (let rowIndex = 0; rowIndex < sheetData.length; rowIndex++) {
         const row = sheetData[rowIndex];
-
         if (!Array.isArray(row)) continue;
 
         for (let columnIndex = 0; columnIndex < row.length; columnIndex++) {
@@ -98,6 +96,7 @@ serve(async (req) => {
             column_name: columnName,
             cell_value: cellValue,
             data_type: typeof cellValue,
+            user_id: userId, // ✅ inserido aqui também
           });
         }
       }
