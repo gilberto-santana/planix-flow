@@ -6,7 +6,6 @@ import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { validateFile } from "@/utils/validateFile";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { v4 as uuidv4 } from "uuid";
 
 const FileUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,7 +24,7 @@ const FileUpload = () => {
     }
 
     const fileExt = file.name.split(".").pop();
-    const fileId = uuidv4();
+    const fileId = crypto.randomUUID();
     const filePath = `${fileId}.${fileExt}`;
 
     setUploading(true);
