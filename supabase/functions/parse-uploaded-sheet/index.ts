@@ -1,105 +1,116 @@
-import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
-import * as xlsx from "https://esm.sh/xlsx@0.18.5";
+// File: supabase/functions/parse-uploaded-sheet/index.ts
+
+import { serve } from 'https://deno.land/std@0.192.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.5';
+import * as xlsx from 'https://esm.sh/xlsx@0.18.5';
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', {
       headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': '*',
       },
     });
   }
 
+  const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
+  const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+
   try {
     const body = await req.json();
-
-    const { filePath, fileId, userId } = body || {};
-    if (!filePath || !fileId || !userId) {
-      return new Response(JSON.stringify({ error: "Parâmetros ausentes" }), {
+    if (!body || !body.fileUrl || !body.userId || !body.fileName) {
+      console.error('❌ Body incompleto ou inválido');
+      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
-        headers: corsHeaders,
+        headers: { 'Access-Control-Allow-Origin': '*' },
       });
     }
 
-    const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const { fileUrl, userId, fileName } = body;
 
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from("spreadsheets")
-      .download(filePath);
+    const response = await fetch(fileUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const workbook = xlsx.read(arrayBuffer, { type: 'array' });
 
-    if (downloadError || !fileData) {
-      return new Response(JSON.stringify({ error: "Erro ao baixar arquivo" }), {
-        status: 500,
-        headers: corsHeaders,
-      });
-    }
-
-    const arrayBuffer = await fileData.arrayBuffer();
-    const workbook = xlsx.read(arrayBuffer, { type: "array" });
-
-    const insertedSpreadsheet = await supabase
-      .from("spreadsheets")
-      .insert({ id: fileId, user_id: userId, file_name: filePath.split("/").pop() })
-      .select("id")
+    // Criar registro na tabela spreadsheets
+    const { data: spreadsheet, error: insertSpreadsheetError } = await supabase
+      .from('spreadsheets')
+      .insert({ user_id: userId, file_name: fileName })
+      .select()
       .single();
 
-    if (insertedSpreadsheet.error) {
-      throw insertedSpreadsheet.error;
+    if (insertSpreadsheetError || !spreadsheet) {
+      console.error('Erro ao criar registro em spreadsheets:', insertSpreadsheetError);
+      return new Response(JSON.stringify({ error: 'Erro ao criar planilha' }), {
+        status: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
     }
 
-    const spreadsheet_id = insertedSpreadsheet.data.id;
-    const sheetInserts = [];
-    const dataInserts = [];
+    const spreadsheetId = spreadsheet.id;
 
-    workbook.SheetNames.forEach((sheetName, sheetIndex) => {
-      const sheetId = crypto.randomUUID();
-      sheetInserts.push({ id: sheetId, spreadsheet_id, sheet_name: sheetName });
+    for (const sheetName of workbook.SheetNames) {
+      const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        header: 1,
+        raw: false,
+        blankrows: false,
+      });
 
-      const sheet = workbook.Sheets[sheetName];
-      const range = xlsx.utils.decode_range(sheet["!ref"]!);
+      // Criar registro na tabela sheets
+      const { data: sheet, error: insertSheetError } = await supabase
+        .from('sheets')
+        .insert({ spreadsheet_id: spreadsheetId, name: sheetName })
+        .select()
+        .single();
 
-      for (let row = range.s.r; row <= range.e.r; row++) {
-        for (let col = range.s.c; col <= range.e.c; col++) {
-          const cellRef = xlsx.utils.encode_cell({ r: row, c: col });
-          const cell = sheet[cellRef];
+      if (insertSheetError || !sheet) {
+        console.error(`Erro ao criar sheet '${sheetName}':`, insertSheetError);
+        continue;
+      }
 
-          dataInserts.push({
-            id: crypto.randomUUID(),
+      const sheetId = sheet.id;
+      const rowsToInsert = [];
+
+      for (let rowIndex = 0; rowIndex < sheetData.length; rowIndex++) {
+        const row = sheetData[rowIndex];
+
+        for (let columnIndex = 0; columnIndex < row.length; columnIndex++) {
+          const cellValue = row[columnIndex];
+          const columnName = sheetData[0]?.[columnIndex] || `Coluna ${columnIndex + 1}`;
+          if (rowIndex === 0) continue; // pular cabeçalho
+
+          rowsToInsert.push({
             sheet_id: sheetId,
-            row_index: row,
-            column_index: col,
-            column_name: xlsx.utils.encode_col(col),
-            cell_value: cell?.v?.toString?.() || "",
-            data_type: typeof cell?.v === "number" ? "number" : "string",
+            row_index: rowIndex,
+            column_index: columnIndex,
+            column_name: columnName,
+            cell_value: cellValue,
+            data_type: typeof cellValue,
           });
         }
       }
-    });
 
-    await supabase.from("sheets").insert(sheetInserts);
-    for (let i = 0; i < dataInserts.length; i += 1000) {
-      const chunk = dataInserts.slice(i, i + 1000);
-      await supabase.from("spreadsheet_data").insert(chunk);
+      if (rowsToInsert.length > 0) {
+        const { error: insertDataError } = await supabase
+          .from('spreadsheet_data')
+          .insert(rowsToInsert);
+
+        if (insertDataError) {
+          console.error(`Erro ao inserir dados na planilha '${sheetName}':`, insertDataError);
+        }
+      }
     }
 
-    return new Response(JSON.stringify({ status: "sucesso" }), {
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: corsHeaders,
+      headers: { 'Access-Control-Allow-Origin': '*' },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Erro interno", message: err.message }), {
+    console.error('❌ Erro inesperado:', err);
+    return new Response(JSON.stringify({ error: 'Erro interno' }), {
       status: 500,
-      headers: corsHeaders,
+      headers: { 'Access-Control-Allow-Origin': '*' },
     });
   }
 });
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
-};
