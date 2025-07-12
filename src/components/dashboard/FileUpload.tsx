@@ -1,73 +1,89 @@
-// src/components/FileUpload.tsx
-
 import React, { useRef, useState } from "react";
-import { Upload, FileCheck } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { validateFile } from "@/utils/validateFile";
-import { generateFilePath } from "@/utils/storageUtils";
-import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { v4 as uuidv4 } from "uuid";
 
-export const FileUpload: React.FC = () => {
-  const inputRef = useRef<HTMLInputElement>(null);
+export default function FileUpload() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const { handleFileUpload, loading, fileName } = useFileProcessing();
-  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
 
-  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const { valid, error } = validateFile(file);
-    if (!valid) {
-      alert(error);
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      toast({ title: "Arquivo inválido", description: validation.error || "Tipo de arquivo não suportado." });
       return;
     }
 
-    const filePath = generateFilePath(file.name);
-    setUploading(true);
+    setSelectedFile(file);
+  };
 
-    const { data, error: uploadError } = await supabase.storage
-      .from("spreadsheets")
-      .upload(filePath, file, {
-        upsert: true,
-        contentType: file.type,
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      toast({ title: "Nenhum arquivo selecionado", description: "Selecione um arquivo para upload." });
+      return;
+    }
+
+    const fileId = crypto.randomUUID();
+    const filePath = `${fileId}/${selectedFile.name}`;
+
+    const { data, error } = await uploadFileToStorage(selectedFile, filePath);
+
+    if (error) {
+      toast({ title: "Erro ao fazer upload", description: error });
+      return;
+    }
+
+    await handleFileUpload(selectedFile, fileId, filePath);
+  };
+
+  const uploadFileToStorage = async (file: File, filePath: string) => {
+    try {
+      const response = await fetch(`/functions/v1/generate-upload-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: filePath }),
       });
 
-    setUploading(false);
+      if (!response.ok) throw new Error("Falha ao obter URL de upload");
 
-    if (uploadError || !data) {
-      console.error("Erro no upload do arquivo:", uploadError);
-      alert("Erro ao fazer upload do arquivo.");
-      return;
+      const { url } = await response.json();
+      const upload = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!upload.ok) throw new Error("Erro ao subir arquivo");
+
+      return { data: true, error: null };
+    } catch (err: any) {
+      return { data: null, error: err.message };
     }
-
-    await handleFileUpload(file, data.path.split("/")[0], data.path);
   };
 
   return (
-    <Card className="p-4 flex flex-col items-center justify-center gap-4">
-      <input
-        ref={inputRef}
+    <div className="space-y-4">
+      <Label htmlFor="upload">Selecione um arquivo</Label>
+      <Input
+        id="upload"
         type="file"
-        accept=".xlsx, .xls, .csv"
-        onChange={onFileChange}
-        style={{ display: "none" }}
+        accept=".xls,.xlsx"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        disabled={loading}
       />
-      <Button
-        variant="outline"
-        onClick={() => inputRef.current?.click()}
-        disabled={loading || uploading}
-      >
-        <Upload className="mr-2 h-4 w-4" />
-        {uploading ? "Enviando..." : loading ? "Processando..." : "Selecionar arquivo"}
+      <Button onClick={handleUpload} disabled={loading || !selectedFile}>
+        {loading ? "Processando..." : fileName ? "Reenviar" : "Fazer Upload"}
       </Button>
-      {fileName && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <FileCheck className="h-4 w-4 text-green-500" />
-          {fileName}
-        </div>
-      )}
-    </Card>
+    </div>
   );
-};
+}
