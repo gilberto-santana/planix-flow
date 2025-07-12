@@ -1,89 +1,74 @@
 import React, { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { validateFile } from "@/utils/validateFile";
-import { useToast } from "@/hooks/use-toast";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { v4 as uuidv4 } from "uuid";
+import { supabase } from "@/integrations/supabase/client";
 
-export default function FileUpload() {
+export const FileUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const { handleFileUpload, loading, fileName } = useFileProcessing();
   const { toast } = useToast();
+  const { handleFileUpload, loading } = useFileProcessing();
+  const [uploading, setUploading] = useState(false);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
-    const validation = validateFile(file);
-    if (!validation.valid) {
-      toast({ title: "Arquivo inválido", description: validation.error || "Tipo de arquivo não suportado." });
+    const { valid, error } = validateFile(file);
+    if (!valid) {
+      toast({ title: "Arquivo inválido", description: error || "Tipo de arquivo não suportado." });
       return;
     }
 
-    setSelectedFile(file);
-  };
-
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      toast({ title: "Nenhum arquivo selecionado", description: "Selecione um arquivo para upload." });
-      return;
-    }
-
+    setUploading(true);
+    const fileExt = file.name.split(".").pop();
     const fileId = crypto.randomUUID();
-    const filePath = `${fileId}/${selectedFile.name}`;
+    const filePath = `${fileId}.${fileExt}`;
 
-    const { data, error } = await uploadFileToStorage(selectedFile, filePath);
-
-    if (error) {
-      toast({ title: "Erro ao fazer upload", description: error });
-      return;
-    }
-
-    await handleFileUpload(selectedFile, fileId, filePath);
-  };
-
-  const uploadFileToStorage = async (file: File, filePath: string) => {
     try {
-      const response = await fetch(`/functions/v1/generate-upload-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fileName: filePath }),
-      });
+      const { error: uploadError } = await supabase.storage
+        .from("spreadsheets")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+        });
 
-      if (!response.ok) throw new Error("Falha ao obter URL de upload");
+      if (uploadError) {
+        console.error("Erro no upload do arquivo:", uploadError);
+        toast({ title: "Erro no upload", description: "Não foi possível enviar o arquivo." });
+        setUploading(false);
+        return;
+      }
 
-      const { url } = await response.json();
-      const upload = await fetch(url, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      if (!upload.ok) throw new Error("Erro ao subir arquivo");
-
-      return { data: true, error: null };
-    } catch (err: any) {
-      return { data: null, error: err.message };
+      await handleFileUpload(file, fileId, filePath);
+    } catch (err) {
+      console.error("Erro inesperado:", err);
+      toast({ title: "Erro", description: "Erro inesperado durante o upload." });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
   return (
-    <div className="space-y-4">
-      <Label htmlFor="upload">Selecione um arquivo</Label>
+    <div className="w-full flex flex-col items-start gap-4">
       <Input
-        id="upload"
         type="file"
-        accept=".xls,.xlsx"
-        ref={fileInputRef}
+        accept=".xlsx,.xls,.csv"
         onChange={handleFileChange}
-        disabled={loading}
+        ref={fileInputRef}
+        disabled={uploading || loading}
       />
-      <Button onClick={handleUpload} disabled={loading || !selectedFile}>
-        {loading ? "Processando..." : fileName ? "Reenviar" : "Fazer Upload"}
+      <Button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={uploading || loading}
+      >
+        {uploading || loading ? "Processando..." : "Enviar Planilha"}
       </Button>
     </div>
   );
-}
+};
