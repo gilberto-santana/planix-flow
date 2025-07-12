@@ -19,7 +19,9 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    if (!body || !body.fileUrl || !body.userId || !body.fileName) {
+    const { fileUrl, userId, fileName, filePath, fileSize, fileType } = body;
+
+    if (!fileUrl || !userId || !fileName || !filePath || !fileSize || !fileType) {
       console.error('❌ Body incompleto ou inválido');
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
@@ -27,21 +29,25 @@ serve(async (req) => {
       });
     }
 
-    const { fileUrl, userId, fileName } = body;
-
     const response = await fetch(fileUrl);
     const arrayBuffer = await response.arrayBuffer();
     const workbook = xlsx.read(arrayBuffer, { type: 'array' });
 
-    // Criar registro na tabela spreadsheets
-    const { data: spreadsheet, error: insertSpreadsheetError } = await supabase
+    // Inserir na tabela spreadsheets com todos os campos obrigatórios
+    const { data: spreadsheet, error: spreadsheetError } = await supabase
       .from('spreadsheets')
-      .insert({ user_id: userId, file_name: fileName })
+      .insert({
+        user_id: userId,
+        file_name: fileName,
+        file_path: filePath,
+        file_size: fileSize,
+        file_type: fileType,
+      })
       .select()
       .single();
 
-    if (insertSpreadsheetError || !spreadsheet) {
-      console.error('Erro ao criar registro em spreadsheets:', insertSpreadsheetError);
+    if (spreadsheetError || !spreadsheet) {
+      console.error('Erro ao criar registro em spreadsheets:', spreadsheetError);
       return new Response(JSON.stringify({ error: 'Erro ao criar planilha' }), {
         status: 500,
         headers: { 'Access-Control-Allow-Origin': '*' },
@@ -57,15 +63,18 @@ serve(async (req) => {
         blankrows: false,
       });
 
-      // Criar registro na tabela sheets
-      const { data: sheet, error: insertSheetError } = await supabase
+      // Corrigido: uso de sheet_name
+      const { data: sheet, error: sheetError } = await supabase
         .from('sheets')
-        .insert({ spreadsheet_id: spreadsheetId, name: sheetName })
+        .insert({
+          spreadsheet_id: spreadsheetId,
+          sheet_name: sheetName,
+        })
         .select()
         .single();
 
-      if (insertSheetError || !sheet) {
-        console.error(`Erro ao criar sheet '${sheetName}':`, insertSheetError);
+      if (sheetError || !sheet) {
+        console.error(`Erro ao criar sheet '${sheetName}':`, sheetError);
         continue;
       }
 
@@ -75,10 +84,12 @@ serve(async (req) => {
       for (let rowIndex = 0; rowIndex < sheetData.length; rowIndex++) {
         const row = sheetData[rowIndex];
 
+        if (!Array.isArray(row)) continue;
+
         for (let columnIndex = 0; columnIndex < row.length; columnIndex++) {
           const cellValue = row[columnIndex];
           const columnName = sheetData[0]?.[columnIndex] || `Coluna ${columnIndex + 1}`;
-          if (rowIndex === 0) continue; // pular cabeçalho
+          if (rowIndex === 0) continue;
 
           rowsToInsert.push({
             sheet_id: sheetId,
@@ -97,7 +108,7 @@ serve(async (req) => {
           .insert(rowsToInsert);
 
         if (insertDataError) {
-          console.error(`Erro ao inserir dados na planilha '${sheetName}':`, insertDataError);
+          console.error(`Erro ao inserir dados na aba '${sheetName}':`, insertDataError);
         }
       }
     }
