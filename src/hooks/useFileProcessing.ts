@@ -5,7 +5,6 @@ import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
 import { generateChartSet, ChartData, SpreadsheetRow } from "@/utils/chartGeneration";
-import { callParseUploadedSheetFunction } from "@/utils/edgeFunctionUtils";
 
 interface DatabaseRow {
   row_index: number;
@@ -33,13 +32,15 @@ export function useFileProcessing() {
 
     const { name, size, type } = file;
 
-    const { data: result, error } = await callParseUploadedSheetFunction({
-      fileId,
-      userId: user.id,
-      filePath,
-      fileName: name,
-      fileSize: size,
-      fileType: type,
+    const { data: result, error } = await supabase.functions.invoke("parse-uploaded-sheet", {
+      body: JSON.stringify({
+        fileId,
+        userId: user.id,
+        filePath,
+        fileName: name,
+        fileSize: size,
+        fileType: type,
+      }),
     });
 
     if (error) {
