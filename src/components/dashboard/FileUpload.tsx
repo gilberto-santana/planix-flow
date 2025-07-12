@@ -1,74 +1,79 @@
-import React, { useRef, useState } from "react";
+// src/components/panel/FileUpload.tsx
+
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { validateFile } from "@/utils/validateFile";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { v4 as uuidv4 } from "uuid";
 
-export const FileUpload = () => {
+const FileUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { handleFileUpload, loading } = useFileProcessing();
+  const { handleFileUpload, loading, fileName } = useFileProcessing();
   const [uploading, setUploading] = useState(false);
 
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
     const { valid, error } = validateFile(file);
     if (!valid) {
-      toast({ title: "Arquivo inválido", description: error || "Tipo de arquivo não suportado." });
+      toast({ title: "Arquivo inválido", description: error });
       return;
     }
 
-    setUploading(true);
     const fileExt = file.name.split(".").pop();
-    const fileId = crypto.randomUUID();
+    const fileId = uuidv4();
     const filePath = `${fileId}.${fileExt}`;
 
-    try {
-      const { error: uploadError } = await supabase.storage
-        .from("spreadsheets")
-        .upload(filePath, file, {
-          upsert: true,
-          contentType: file.type,
-        });
+    setUploading(true);
 
-      if (uploadError) {
-        console.error("Erro no upload do arquivo:", uploadError);
-        toast({ title: "Erro no upload", description: "Não foi possível enviar o arquivo." });
-        setUploading(false);
-        return;
-      }
+    const { error: uploadError } = await supabase.storage
+      .from("spreadsheets")
+      .upload(filePath, file);
 
-      await handleFileUpload(file, fileId, filePath);
-    } catch (err) {
-      console.error("Erro inesperado:", err);
-      toast({ title: "Erro", description: "Erro inesperado durante o upload." });
-    } finally {
+    if (uploadError) {
+      console.error("Erro ao fazer upload:", uploadError.message);
+      toast({ title: "Erro ao enviar arquivo", description: uploadError.message });
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      return;
     }
+
+    const { data } = supabase.storage.from("spreadsheets").getPublicUrl(filePath);
+    const fileUrl = data?.publicUrl;
+
+    if (!fileUrl) {
+      toast({ title: "Erro ao obter URL do arquivo" });
+      setUploading(false);
+      return;
+    }
+
+    await handleFileUpload(file, fileId, fileUrl);
+    setUploading(false);
   };
 
   return (
-    <div className="w-full flex flex-col items-start gap-4">
-      <Input
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        onChange={handleFileChange}
+    <div className="flex flex-col items-start space-y-4">
+      <input
         ref={fileInputRef}
-        disabled={uploading || loading}
+        type="file"
+        accept=".xlsx, .xls"
+        className="hidden"
+        onChange={handleFileChange}
       />
+
       <Button
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading || loading}
       >
-        {uploading || loading ? "Processando..." : "Enviar Planilha"}
+        {uploading || loading ? "Processando..." : "Selecionar Planilha"}
       </Button>
+
+      {fileName && <span className="text-sm text-muted-foreground">📄 {fileName}</span>}
     </div>
   );
 };
+
+export default FileUpload;
