@@ -24,7 +24,7 @@ export function useFileProcessing() {
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+  const handleFileUpload = async (file: File, fileId: string, fileUrl: string) => {
     if (!user) return;
 
     setLoading(true);
@@ -36,7 +36,7 @@ export function useFileProcessing() {
       body: JSON.stringify({
         fileId,
         userId: user.id,
-        filePath,
+        fileUrl, // ✅ corrigido: agora envia fileUrl, não filePath
         fileName: name,
         fileSize: size,
         fileType: type,
