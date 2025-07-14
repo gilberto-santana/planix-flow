@@ -31,12 +31,14 @@ export function useFileProcessing() {
     setFileName(file.name);
 
     const { name, size, type } = file;
+    const filePath = `${fileId}.${name.split('.').pop()}`; // 🔁 reconstrói filePath
 
     const { data: result, error } = await supabase.functions.invoke("parse-uploaded-sheet", {
       body: JSON.stringify({
         fileId,
         userId: user.id,
-        fileUrl, // ✅ corrigido: agora envia fileUrl, não filePath
+        fileUrl,
+        filePath, // ✅ agora enviado
         fileName: name,
         fileSize: size,
         fileType: type,
