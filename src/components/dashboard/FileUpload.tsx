@@ -49,6 +49,7 @@ const FileUpload = () => {
       return;
     }
 
+    // ✅ CORRIGIDO: antes passava filePath, agora envia fileUrl corretamente
     await handleFileUpload(file, fileId, fileUrl);
     setUploading(false);
   };
