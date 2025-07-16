@@ -70,20 +70,21 @@ serve(async (req) => {
 
     const spreadsheetId = spreadsheet.id;
 
-    for (const sheetName of workbook.SheetNames) {
+    for (const [sheetIndex, sheetName] of workbook.SheetNames.entries()) {
       const sheetData = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName], {
         header: 1,
         raw: false,
         blankrows: false,
       });
 
-      if (!sheetData || sheetData.length === 0) continue;
+      if (!sheetData || sheetData.length < 2) continue;
 
       const { data: sheet, error: sheetError } = await supabase
         .from('sheets')
         .insert({
           spreadsheet_id: spreadsheetId,
           sheet_name: sheetName,
+          sheet_index: sheetIndex,
           user_id: userId,
         })
         .select()
@@ -95,16 +96,16 @@ serve(async (req) => {
       }
 
       const sheetId = sheet.id;
+      const headerRow = sheetData[0];
       const rowsToInsert = [];
 
-      for (let rowIndex = 0; rowIndex < sheetData.length; rowIndex++) {
+      for (let rowIndex = 1; rowIndex < sheetData.length; rowIndex++) {
         const row = sheetData[rowIndex];
         if (!Array.isArray(row)) continue;
 
         for (let columnIndex = 0; columnIndex < row.length; columnIndex++) {
           const cellValue = row[columnIndex];
-          const columnName = sheetData[0]?.[columnIndex] || `Coluna ${columnIndex + 1}`;
-          if (rowIndex === 0) continue;
+          const columnName = headerRow[columnIndex] || `Coluna ${columnIndex + 1}`;
 
           rowsToInsert.push({
             sheet_id: sheetId,
