@@ -46,17 +46,33 @@ export function useFileProcessing() {
         }),
       });
 
-      if (invokeError || !parseResult?.spreadsheetId) {
-        console.error("❌ Erro na edge function:", invokeError);
-        toast({
-          title: "Erro ao processar",
-          description: "Não foi possível processar a planilha.",
-        });
-        setLoading(false);
-        return;
-      }
+      console.log("🟢 parseResult:", parseResult);
+      console.log("🟠 invokeError:", invokeError);
 
-      const spreadsheetId = parseResult.spreadsheetId;
+      let spreadsheetId = parseResult?.spreadsheetId;
+
+      // fallback: se não veio o ID da função, tenta buscar o mais recente criado
+      if (!spreadsheetId) {
+        console.warn("⚠️ spreadsheetId não retornado pela função. Buscando manualmente...");
+
+        const { data: spreadsheets, error: fallbackError } = await supabase
+          .from("spreadsheets")
+          .select("id")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (fallbackError || !spreadsheets?.length) {
+          toast({
+            title: "Erro ao processar",
+            description: "Não foi possível encontrar o ID da planilha processada.",
+          });
+          setLoading(false);
+          return;
+        }
+
+        spreadsheetId = spreadsheets[0].id;
+      }
 
       const sheetsQuery = await supabase
         .from("sheets")
@@ -64,6 +80,7 @@ export function useFileProcessing() {
         .eq("spreadsheet_id", spreadsheetId);
 
       if (sheetsQuery.error) {
+        console.error("❌ Erro ao buscar sheets:", sheetsQuery.error);
         toast({
           title: "Erro ao carregar dados",
           description: "Erro ao buscar as abas da planilha.",
@@ -92,6 +109,7 @@ export function useFileProcessing() {
         .order("row_index", { ascending: true });
 
       if (dataQuery.error) {
+        console.error("❌ Erro ao buscar dados:", dataQuery.error);
         toast({
           title: "Erro ao carregar dados",
           description: "Erro ao buscar os dados da planilha.",
