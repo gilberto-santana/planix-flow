@@ -1,56 +1,89 @@
-
-export interface SpreadsheetRow {
-  row_index: number;
-  column_name: string;
-  value: string;
-  sheet_name: string;
-}
+// src/utils/chartGeneration.ts
 
 export interface ChartData {
+  id?: string;
+  type: "bar" | "pie" | "line";
   title: string;
-  type: "bar" | "line" | "pie";
-  data: { name: string; value: number }[];
+  labels: string[];
+  data: number[];
+  sheetName?: string;
+}
+
+interface SpreadsheetRow {
+  row_index: number;
+  column_name: string | null;
+  cell_value: string | null;
+  sheet_id: string;
+  sheet_name: string;
+  column_index: number;
+  created_at: string;
+  data_type: string | null;
 }
 
 export function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
-  if (!rows || rows.length === 0) return [];
+  if (rows.length === 0) return [];
 
-  const bySheet = new Map<string, SpreadsheetRow[]>();
-
-  for (const row of rows) {
-    if (!bySheet.has(row.sheet_name)) bySheet.set(row.sheet_name, []);
-    bySheet.get(row.sheet_name)!.push(row);
-  }
+  const groupedBySheet = new Map<string, SpreadsheetRow[]>();
+  rows.forEach((row) => {
+    if (!groupedBySheet.has(row.sheet_name)) {
+      groupedBySheet.set(row.sheet_name, []);
+    }
+    groupedBySheet.get(row.sheet_name)!.push(row);
+  });
 
   const charts: ChartData[] = [];
 
-  for (const [sheetName, sheetRows] of bySheet.entries()) {
-    const byRow = new Map<number, Map<string, string>>();
+  groupedBySheet.forEach((sheetRows, sheetName) => {
+    const byRowIndex = new Map<number, Map<string, string | null>>();
 
-    for (const row of sheetRows) {
-      if (!byRow.has(row.row_index)) byRow.set(row.row_index, new Map());
-      byRow.get(row.row_index)!.set(row.column_name, row.value);
-    }
+    sheetRows.forEach((row) => {
+      if (!byRowIndex.has(row.row_index)) {
+        byRowIndex.set(row.row_index, new Map());
+      }
+      byRowIndex.get(row.row_index)!.set(row.column_name || "", row.cell_value);
+    });
 
-    const parsedRows = [...byRow.entries()]
+    const sortedRows = [...byRowIndex.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([, map]) => Object.fromEntries(map));
 
-    if (parsedRows.length < 2) continue;
+    if (sortedRows.length < 2) return;
 
-    const labels = Object.keys(parsedRows[0]).filter((k) => k.toLowerCase() !== "total");
-    for (const label of labels) {
-      const chart: ChartData = {
-        type: "bar",
-        title: `${label} (${sheetName})`,
-        data: parsedRows.map((r) => ({
-          name: r[labels[0]],
-          value: Number(r[label]) || 0,
-        })),
-      };
-      charts.push(chart);
+    const header = sortedRows[0];
+    const keys = Object.keys(header);
+    const chartsPerSheet: ChartData[] = [];
+
+    for (let i = 1; i < keys.length; i++) {
+      const labelKey = keys[0];
+      const valueKey = keys[i];
+
+      const labels: string[] = [];
+      const data: number[] = [];
+
+      for (let j = 1; j < sortedRows.length; j++) {
+        const row = sortedRows[j];
+        const label = row[labelKey];
+        const value = parseFloat(row[valueKey]);
+
+        if (label && !isNaN(value)) {
+          labels.push(label);
+          data.push(value);
+        }
+      }
+
+      if (labels.length && data.length) {
+        chartsPerSheet.push({
+          title: `${sheetName} - ${valueKey}`,
+          labels,
+          data,
+          type: "bar",
+          sheetName,
+        });
+      }
     }
-  }
+
+    charts.push(...chartsPerSheet);
+  });
 
   return charts;
 }
