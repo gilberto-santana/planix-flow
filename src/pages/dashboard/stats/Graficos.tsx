@@ -39,7 +39,9 @@ const Graficos = () => {
           row_index: item.row_index,
           sheet_name: (item.sheets as any)?.sheet_name || '',
           file_name: (item.sheets as any)?.spreadsheets?.file_name || '',
-          data_type: item.data_type || 'string'
+          data_type: item.data_type || 'string',
+          sheet_id: item.sheet_id,
+          created_at: item.created_at
         }));
 
         // @ts-ignore
