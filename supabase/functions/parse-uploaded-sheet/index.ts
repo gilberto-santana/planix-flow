@@ -22,7 +22,6 @@ serve(async (req) => {
     const { fileUrl, userId, fileName, filePath, fileSize, fileType } = body;
 
     if (!fileUrl || !userId || !fileName || !filePath || !fileSize || !fileType) {
-      console.error('❌ Body incompleto ou inválido');
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { 'Access-Control-Allow-Origin': '*' },
@@ -38,15 +37,12 @@ serve(async (req) => {
       blankrows: false,
     });
 
-    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
-      console.error('❌ Nenhuma aba encontrada na planilha');
+    if (!workbook || workbook.SheetNames.length === 0) {
       return new Response(JSON.stringify({ error: 'Planilha vazia ou inválida' }), {
         status: 400,
         headers: { 'Access-Control-Allow-Origin': '*' },
       });
     }
-
-    console.log('✅ Abas encontradas:', workbook.SheetNames);
 
     const { data: spreadsheet, error: spreadsheetError } = await supabase
       .from('spreadsheets')
@@ -61,7 +57,6 @@ serve(async (req) => {
       .single();
 
     if (spreadsheetError || !spreadsheet) {
-      console.error('Erro ao criar registro em spreadsheets:', spreadsheetError);
       return new Response(JSON.stringify({ error: 'Erro ao criar planilha' }), {
         status: 500,
         headers: { 'Access-Control-Allow-Origin': '*' },
@@ -90,10 +85,7 @@ serve(async (req) => {
         .select()
         .single();
 
-      if (sheetError || !sheet) {
-        console.error(`Erro ao criar sheet '${sheetName}':`, sheetError);
-        continue;
-      }
+      if (sheetError || !sheet) continue;
 
       const sheetId = sheet.id;
       const headerRow = sheetData[0];
@@ -119,22 +111,18 @@ serve(async (req) => {
       }
 
       if (rowsToInsert.length > 0) {
-        const { error: insertDataError } = await supabase
-          .from('spreadsheet_data')
-          .insert(rowsToInsert);
-
-        if (insertDataError) {
-          console.error(`Erro ao inserir dados na aba '${sheetName}':`, insertDataError);
-        }
+        await supabase.from('spreadsheet_data').insert(rowsToInsert);
       }
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Access-Control-Allow-Origin': '*' },
-    });
+    return new Response(
+      JSON.stringify({ success: true, spreadsheetId }),
+      {
+        status: 200,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      }
+    );
   } catch (err) {
-    console.error('❌ Erro inesperado:', err);
     return new Response(JSON.stringify({ error: 'Erro interno' }), {
       status: 500,
       headers: { 'Access-Control-Allow-Origin': '*' },
