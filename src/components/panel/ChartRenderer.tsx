@@ -29,6 +29,55 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
 
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#00C49F', '#FFBB28', '#FF8042'];
 
+  const renderChart = () => {
+    if (chart.type === "bar") {
+      return (
+        <BarChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Bar dataKey="value" fill="#8884d8" />
+        </BarChart>
+      );
+    }
+    
+    if (chart.type === "pie") {
+      return (
+        <PieChart>
+          <Pie
+            data={chartData}
+            dataKey="value"
+            nameKey="name"
+            cx="50%"
+            cy="50%"
+            outerRadius={100}
+            label
+          >
+            {chartData.map((_, index) => (
+              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            ))}
+          </Pie>
+          <Tooltip />
+        </PieChart>
+      );
+    }
+    
+    if (chart.type === "line") {
+      return (
+        <LineChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="name" />
+          <YAxis />
+          <Tooltip />
+          <Line dataKey="value" stroke="#8884d8" strokeWidth={2} />
+        </LineChart>
+      );
+    }
+    
+    return null;
+  };
+
   return (
     <Card className="p-4">
       <CardHeader>
@@ -36,42 +85,7 @@ const ChartRenderer = ({ chart }: ChartRendererProps) => {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          {chart.type === "bar" && (
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="value" fill="#8884d8" />
-            </BarChart>
-          )}
-          {chart.type === "pie" && (
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label
-              >
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          )}
-          {chart.type === "line" && (
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Line dataKey="value" stroke="#8884d8" strokeWidth={2} />
-            </LineChart>
-          )}
+          {renderChart()}
         </ResponsiveContainer>
       </CardContent>
     </Card>
