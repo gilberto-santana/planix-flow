@@ -1,7 +1,21 @@
-// src/components/dashboard/DashboardStats.tsx
+
 import { useNavigate } from 'react-router-dom';
 
-export default function DashboardStats({ stats }: { stats: any }) {
+interface DashboardStatsProps {
+  stats?: {
+    totalSpreadsheets: number;
+    totalSheets: number;
+    totalCharts: number;
+    totalRecentUploads: number;
+  };
+}
+
+export function DashboardStats({ stats = {
+  totalSpreadsheets: 0,
+  totalSheets: 0,
+  totalCharts: 0,
+  totalRecentUploads: 0
+} }: DashboardStatsProps) {
   const navigate = useNavigate();
 
   return (
@@ -36,8 +50,7 @@ export default function DashboardStats({ stats }: { stats: any }) {
       >
         <div className="text-sm text-muted-foreground">Uploads Recentes</div>
         <div className="text-2xl font-bold">{stats.totalRecentUploads}</div>
-        <div className="text-xs text-muted-foreground">Últimos 7 dias
-        </div>
+        <div className="text-xs text-muted-foreground">Últimos 7 dias</div>
       </div>
     </div>
   );

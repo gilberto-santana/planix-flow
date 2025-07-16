@@ -1,4 +1,3 @@
-// src/components/dashboard/Graficos.tsx
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,13 +19,32 @@ const Graficos = () => {
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("spreadsheet_data")
-        .select("*")
+        .select(`
+          *,
+          sheets!inner(
+            sheet_name,
+            spreadsheets!inner(
+              file_name
+            )
+          )
+        `)
         .eq("user_id", user.id);
 
       if (!error && data) {
+        // Transform the database data to match SpreadsheetRow interface
+        const transformedData = data.map(item => ({
+          cell_value: item.cell_value || '',
+          column_index: item.column_index,
+          column_name: item.column_name || '',
+          row_index: item.row_index,
+          sheet_name: (item.sheets as any)?.sheet_name || '',
+          file_name: (item.sheets as any)?.spreadsheets?.file_name || '',
+          data_type: item.data_type || 'string'
+        }));
+
         // @ts-ignore
         const chartModule = await import("@/utils/chartGeneration");
-        const charts = chartModule.generateChartSet(data);
+        const charts = chartModule.generateChartSet(transformedData);
         setCharts(charts);
       }
     };
