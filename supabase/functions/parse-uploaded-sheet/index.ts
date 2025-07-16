@@ -114,7 +114,6 @@ serve(async (req) => {
             column_name: columnName,
             cell_value: cellValue,
             data_type: typeof cellValue,
-            user_id: userId,
           });
         }
       }
