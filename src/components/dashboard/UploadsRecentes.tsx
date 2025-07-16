@@ -1,11 +1,9 @@
 // src/components/dashboard/UploadsRecentes.tsx
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
-import ptBR from "date-fns/locale/pt-BR";
 
 interface Spreadsheet {
   id: string;
@@ -14,56 +12,51 @@ interface Spreadsheet {
 }
 
 const UploadsRecentes = () => {
-  const navigate = useNavigate();
-  const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
+  const [planilhas, setPlanilhas] = useState<Spreadsheet[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const fetchSpreadsheets = async () => {
-    const { data, error } = await supabase
-      .from("spreadsheets")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (!error && data) {
-      setSpreadsheets(data);
-    }
-
-    setLoading(false);
-  };
-
-  const handleBack = () => {
-    navigate("/dashboard/stats?type=home");
-  };
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchSpreadsheets();
+    const fetchPlanilhas = async () => {
+      const { data, error } = await supabase
+        .from("spreadsheets")
+        .select("id, file_name, created_at")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erro ao buscar planilhas:", error.message);
+      } else {
+        setPlanilhas(data || []);
+      }
+
+      setLoading(false);
+    };
+
+    fetchPlanilhas();
   }, []);
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex justify-between items-center">
-        <Button onClick={handleBack}>← Voltar</Button>
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-semibold">Uploads Recentes</h1>
+        <Button onClick={() => navigate(-1)}>← Voltar</Button>
       </div>
 
-      <h2 className="text-xl font-bold">Uploads Recentes</h2>
-
       {loading ? (
-        <p>Carregando arquivos...</p>
-      ) : spreadsheets.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum arquivo enviado ainda.</p>
+        <p>Carregando...</p>
+      ) : planilhas.length === 0 ? (
+        <p>Nenhuma planilha encontrada.</p>
       ) : (
-        <ul className="space-y-3">
-          {spreadsheets.map((spreadsheet) => (
+        <ul className="space-y-4">
+          {planilhas.map((planilha) => (
             <li
-              key={spreadsheet.id}
-              className="border rounded-lg p-4 shadow-sm flex justify-between items-center"
+              key={planilha.id}
+              className="border rounded-xl p-4 shadow-sm hover:shadow-md transition"
             >
-              <span className="font-medium">{spreadsheet.file_name}</span>
-              <span className="text-sm text-muted-foreground">
-                {format(new Date(spreadsheet.created_at), "dd 'de' MMMM 'de' yyyy - HH:mm", {
-                  locale: ptBR,
-                })}
-              </span>
+              <div className="text-base font-medium">{planilha.file_name}</div>
+              <div className="text-sm text-muted-foreground">
+                Enviado em {new Date(planilha.created_at).toLocaleString()}
+              </div>
             </li>
           ))}
         </ul>
