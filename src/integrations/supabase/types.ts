@@ -88,6 +88,7 @@ export type Database = {
           sheet_index: number
           sheet_name: string
           spreadsheet_id: string
+          user_id: string | null
         }
         Insert: {
           column_count?: number | null
@@ -97,6 +98,7 @@ export type Database = {
           sheet_index: number
           sheet_name: string
           spreadsheet_id: string
+          user_id?: string | null
         }
         Update: {
           column_count?: number | null
@@ -106,6 +108,7 @@ export type Database = {
           sheet_index?: number
           sheet_name?: string
           spreadsheet_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -114,6 +117,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "spreadsheets"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sheets_spreadsheet_id_fkey"
+            columns: ["spreadsheet_id"]
+            isOneToOne: false
+            referencedRelation: "view_spreadsheet_summary"
+            referencedColumns: ["spreadsheet_id"]
           },
         ]
       }
@@ -127,6 +137,7 @@ export type Database = {
           id: string
           row_index: number
           sheet_id: string
+          user_id: string | null
         }
         Insert: {
           cell_value?: string | null
@@ -137,6 +148,7 @@ export type Database = {
           id?: string
           row_index: number
           sheet_id: string
+          user_id?: string | null
         }
         Update: {
           cell_value?: string | null
@@ -147,6 +159,7 @@ export type Database = {
           id?: string
           row_index?: number
           sheet_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -204,9 +217,11 @@ export type Database = {
     Views: {
       view_spreadsheet_summary: {
         Row: {
+          created_at: string | null
+          file_name: string | null
+          spreadsheet_id: string | null
           total_cells: number | null
           total_sheets: number | null
-          total_spreadsheets: number | null
           user_id: string | null
         }
         Relationships: []

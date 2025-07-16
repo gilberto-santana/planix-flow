@@ -1,3 +1,4 @@
+
 // src/hooks/useFileProcessing.ts
 
 import { useState } from "react";
@@ -123,8 +124,12 @@ export function useFileProcessing() {
       const normalized: SpreadsheetRow[] = data.map((row) => ({
         row_index: row.row_index,
         column_name: row.column_name || "",
-        value: row.cell_value || "",
+        cell_value: row.cell_value || "",
+        sheet_id: row.sheet_id,
         sheet_name: sheetsMap.get(row.sheet_id) || "Aba",
+        column_index: row.column_index,
+        created_at: row.created_at,
+        data_type: row.data_type,
       }));
 
       const generatedCharts = generateChartSet(normalized);

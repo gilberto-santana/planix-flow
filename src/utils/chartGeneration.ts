@@ -1,3 +1,4 @@
+
 // src/utils/chartGeneration.ts
 
 export interface ChartData {
@@ -9,7 +10,7 @@ export interface ChartData {
   sheetName?: string;
 }
 
-interface SpreadsheetRow {
+export interface SpreadsheetRow {
   row_index: number;
   column_name: string | null;
   cell_value: string | null;

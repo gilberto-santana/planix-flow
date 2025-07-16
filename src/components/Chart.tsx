@@ -10,6 +10,12 @@ interface ChartProps {
 export const Chart = ({ data }: ChartProps) => {
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#00C49F', '#FFBB28', '#FF8042'];
 
+  // Transform chart data for recharts
+  const chartData = data.labels.map((label, i) => ({
+    name: label,
+    value: data.data[i]
+  }));
+
   return (
     <Card className="w-full max-w-4xl mx-auto my-4 shadow-md">
       <CardContent>
@@ -17,7 +23,7 @@ export const Chart = ({ data }: ChartProps) => {
         <div className="h-[300px]">
           <ResponsiveContainer width="100%" height="100%">
             {data.type === 'bar' ? (
-              <BarChart data={data.data}>
+              <BarChart data={chartData}>
                 <XAxis dataKey="name" />
                 <YAxis />
                 <Tooltip />
@@ -27,7 +33,7 @@ export const Chart = ({ data }: ChartProps) => {
             ) : (
               <PieChart>
                 <Pie
-                  data={data.data}
+                  data={chartData}
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
@@ -35,7 +41,7 @@ export const Chart = ({ data }: ChartProps) => {
                   outerRadius={100}
                   label
                 >
-                  {data.data.map((entry, index) => (
+                  {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
