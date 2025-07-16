@@ -32,21 +32,21 @@ serve(async (req) => {
     const response = await fetch(fileUrl);
     const arrayBuffer = await response.arrayBuffer();
 
-    let workbook = xlsx.read(arrayBuffer, { type: 'array' });
+    const workbook = xlsx.read(arrayBuffer, {
+      type: 'array',
+      raw: false,
+      blankrows: false,
+    });
 
-    // Fallback caso não detecte nenhuma aba
-    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-      const uint8Array = new Uint8Array(arrayBuffer);
-      workbook = xlsx.read(uint8Array, { type: 'array' });
-    }
-
-    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-      console.error('❌ Nenhuma aba detectada no arquivo:', fileName);
-      return new Response(JSON.stringify({ error: 'Nenhuma aba foi encontrada nesta planilha.' }), {
-        status: 422,
+    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+      console.error('❌ Nenhuma aba encontrada na planilha');
+      return new Response(JSON.stringify({ error: 'Planilha vazia ou inválida' }), {
+        status: 400,
         headers: { 'Access-Control-Allow-Origin': '*' },
       });
     }
+
+    console.log('✅ Abas encontradas:', workbook.SheetNames);
 
     const { data: spreadsheet, error: spreadsheetError } = await supabase
       .from('spreadsheets')
@@ -76,6 +76,8 @@ serve(async (req) => {
         raw: false,
         blankrows: false,
       });
+
+      if (!sheetData || sheetData.length === 0) continue;
 
       const { data: sheet, error: sheetError } = await supabase
         .from('sheets')
