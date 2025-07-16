@@ -34,7 +34,7 @@ export function useFileProcessing() {
     const filePath = `${fileId}.${name.split(".").pop()}`;
 
     try {
-      const { error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+      const { data: parseResult, error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
         body: JSON.stringify({
           fileId,
           userId: user.id,
@@ -46,7 +46,7 @@ export function useFileProcessing() {
         }),
       });
 
-      if (invokeError) {
+      if (invokeError || !parseResult?.spreadsheetId) {
         console.error("❌ Erro na edge function:", invokeError);
         toast({
           title: "Erro ao processar",
@@ -56,13 +56,14 @@ export function useFileProcessing() {
         return;
       }
 
+      const spreadsheetId = parseResult.spreadsheetId;
+
       const sheetsQuery = await supabase
         .from("sheets")
         .select("id, sheet_name")
-        .eq("spreadsheet_id", fileId);
+        .eq("spreadsheet_id", spreadsheetId);
 
       if (sheetsQuery.error) {
-        console.error("❌ Erro ao buscar sheets:", sheetsQuery.error);
         toast({
           title: "Erro ao carregar dados",
           description: "Erro ao buscar as abas da planilha.",
@@ -91,7 +92,6 @@ export function useFileProcessing() {
         .order("row_index", { ascending: true });
 
       if (dataQuery.error) {
-        console.error("❌ Erro ao buscar dados:", dataQuery.error);
         toast({
           title: "Erro ao carregar dados",
           description: "Erro ao buscar os dados da planilha.",
