@@ -11,12 +11,14 @@ const AbasProcessadas = () => {
   };
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between mb-4">
+    <div className="p-4 space-y-6">
+      <div className="flex justify-between items-center">
         <Button onClick={handleBack}>← Voltar</Button>
       </div>
 
-      <p className="text-muted-foreground text-center">Nenhuma função ativa no momento para esta aba.</p>
+      <h2 className="text-xl font-bold">Abas Processadas</h2>
+
+      <p className="text-muted-foreground">Em breve você poderá ver as abas processadas aqui.</p>
     </div>
   );
 };
