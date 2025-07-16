@@ -31,49 +31,58 @@ export function useFileProcessing() {
     setFileName(file.name);
 
     const { name, size, type } = file;
-    const filePath = `${fileId}.${name.split('.').pop()}`; // 🔁 reconstrói filePath
-
-    const { data: result, error } = await supabase.functions.invoke("parse-uploaded-sheet", {
-      body: JSON.stringify({
-        fileId,
-        userId: user.id,
-        fileUrl,
-        filePath, // ✅ agora enviado
-        fileName: name,
-        fileSize: size,
-        fileType: type,
-      }),
-    });
-
-    if (error) {
-      console.error("Erro ao processar planilha:", error);
-      toast({ title: "Erro ao processar", description: "Não foi possível processar a planilha." });
-      setLoading(false);
-      return;
-    }
+    const filePath = `${fileId}.${name.split(".").pop()}`;
 
     try {
+      const { error: invokeError } = await supabase.functions.invoke("parse-uploaded-sheet", {
+        body: JSON.stringify({
+          fileId,
+          userId: user.id,
+          fileUrl,
+          filePath,
+          fileName: name,
+          fileSize: size,
+          fileType: type,
+        }),
+      });
+
+      if (invokeError) {
+        console.error("❌ Erro na edge function:", invokeError);
+        toast({
+          title: "Erro ao processar",
+          description: "Não foi possível processar a planilha.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const sheetsQuery = await supabase
         .from("sheets")
         .select("id, sheet_name")
         .eq("spreadsheet_id", fileId);
 
-      if (sheetsQuery.error || !sheetsQuery.data) {
-        console.error("Erro ao buscar sheets:", sheetsQuery.error);
-        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar as abas da planilha." });
+      if (sheetsQuery.error) {
+        console.error("❌ Erro ao buscar sheets:", sheetsQuery.error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Erro ao buscar as abas da planilha.",
+        });
         setLoading(false);
         return;
       }
 
-      const sheets = sheetsQuery.data;
-      const sheetIds = sheets.map((sheet) => sheet.id);
-
-      if (sheetIds.length === 0) {
-        console.log("Nenhuma aba encontrada para esta planilha");
-        toast({ title: "Aviso", description: "Nenhuma aba foi encontrada nesta planilha." });
+      const sheets = sheetsQuery.data || [];
+      if (sheets.length === 0) {
+        toast({
+          title: "Aviso",
+          description: "Nenhuma aba foi encontrada nesta planilha.",
+        });
         setLoading(false);
         return;
       }
+
+      const sheetIds = sheets.map((s) => s.id);
+      const sheetsMap = new Map(sheets.map((s) => [s.id, s.sheet_name]));
 
       const dataQuery = await supabase
         .from("spreadsheet_data")
@@ -81,17 +90,19 @@ export function useFileProcessing() {
         .in("sheet_id", sheetIds)
         .order("row_index", { ascending: true });
 
-      if (dataQuery.error || !dataQuery.data) {
-        console.error("Erro ao buscar dados:", dataQuery.error);
-        toast({ title: "Erro ao carregar dados", description: "Erro ao buscar os dados da planilha." });
+      if (dataQuery.error) {
+        console.error("❌ Erro ao buscar dados:", dataQuery.error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Erro ao buscar os dados da planilha.",
+        });
         setLoading(false);
         return;
       }
 
-      const data = dataQuery.data as DatabaseRow[];
-      const sheetsMap = new Map(sheets.map((sheet) => [sheet.id, sheet.sheet_name]));
+      const data = (dataQuery.data || []) as DatabaseRow[];
 
-      const normalized: SpreadsheetRow[] = data.map((row: DatabaseRow) => ({
+      const normalized: SpreadsheetRow[] = data.map((row) => ({
         row_index: row.row_index,
         column_name: row.column_name || "",
         value: row.cell_value || "",
@@ -100,15 +111,18 @@ export function useFileProcessing() {
 
       const generatedCharts = generateChartSet(normalized);
       setCharts(generatedCharts);
-      setLoading(false);
 
       toast({
         title: "Planilha processada com sucesso!",
         description: `${generatedCharts.length} gráficos foram gerados.`,
       });
-    } catch (error) {
-      console.error("Erro no processamento:", error);
-      toast({ title: "Erro", description: "Erro inesperado durante o processamento." });
+    } catch (err) {
+      console.error("❌ Erro inesperado:", err);
+      toast({
+        title: "Erro inesperado",
+        description: "Algo deu errado ao processar a planilha.",
+      });
+    } finally {
       setLoading(false);
     }
   };
