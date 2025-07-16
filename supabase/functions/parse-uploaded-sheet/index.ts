@@ -31,7 +31,22 @@ serve(async (req) => {
 
     const response = await fetch(fileUrl);
     const arrayBuffer = await response.arrayBuffer();
-    const workbook = xlsx.read(arrayBuffer, { type: 'array' });
+
+    let workbook = xlsx.read(arrayBuffer, { type: 'array' });
+
+    // Fallback caso não detecte nenhuma aba
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      const uint8Array = new Uint8Array(arrayBuffer);
+      workbook = xlsx.read(uint8Array, { type: 'array' });
+    }
+
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      console.error('❌ Nenhuma aba detectada no arquivo:', fileName);
+      return new Response(JSON.stringify({ error: 'Nenhuma aba foi encontrada nesta planilha.' }), {
+        status: 422,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      });
+    }
 
     const { data: spreadsheet, error: spreadsheetError } = await supabase
       .from('spreadsheets')
@@ -67,7 +82,7 @@ serve(async (req) => {
         .insert({
           spreadsheet_id: spreadsheetId,
           sheet_name: sheetName,
-          user_id: userId, // ✅ inserido aqui
+          user_id: userId,
         })
         .select()
         .single();
@@ -96,7 +111,7 @@ serve(async (req) => {
             column_name: columnName,
             cell_value: cellValue,
             data_type: typeof cellValue,
-            user_id: userId, // ✅ inserido aqui também
+            user_id: userId,
           });
         }
       }
