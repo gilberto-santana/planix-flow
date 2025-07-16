@@ -31,7 +31,10 @@ const FileUpload = () => {
 
     const { error: uploadError } = await supabase.storage
       .from("spreadsheets")
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        contentType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        upsert: true,
+      });
 
     if (uploadError) {
       console.error("Erro ao fazer upload:", uploadError.message);
@@ -49,7 +52,6 @@ const FileUpload = () => {
       return;
     }
 
-    // ✅ CORRIGIDO: antes passava filePath, agora envia fileUrl corretamente
     await handleFileUpload(file, fileId, fileUrl);
     setUploading(false);
   };
