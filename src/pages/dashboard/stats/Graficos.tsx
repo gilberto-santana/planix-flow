@@ -1,83 +1,88 @@
-// src/pages/dashboard/stats/Graficos.tsx
+// src/components/dashboard/Graficos.tsx
 
-import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { ChartData } from "@/utils/chartGeneration";
-import ChartRenderer from "@/components/ChartRenderer";
+import { Bar, BarChart, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-const GraficosPage = () => {
+const Graficos = () => {
   const [charts, setCharts] = useState<ChartData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchCharts = async () => {
+    if (!user) return;
+
+    const fetchData = async () => {
       const { data, error } = await supabase
-        .from("chart_data")
+        .from("spreadsheet_data")
         .select("*")
-        .order("created_at", { ascending: false });
+        .eq("user_id", user.id);
 
-      if (error) {
-        console.error("Erro ao buscar gráficos:", error.message);
-      } else {
-        setCharts(data || []);
+      if (!error && data) {
+        // @ts-ignore
+        const chartModule = await import("@/utils/chartGeneration");
+        const charts = chartModule.generateChartSet(data);
+        setCharts(charts);
       }
-
-      setLoading(false);
     };
 
-    fetchCharts();
-  }, []);
+    fetchData();
+  }, [user]);
 
-  const handleExportImage = async () => {
-    if (!containerRef.current) return;
-    const canvas = await html2canvas(containerRef.current);
-    const link = document.createElement("a");
-    link.download = "graficos.png";
-    link.href = canvas.toDataURL();
-    link.click();
+  const handleBack = () => {
+    navigate("/dashboard/stats?type=home");
   };
 
-  const handleExportPDF = async () => {
-    if (!containerRef.current) return;
-    const canvas = await html2canvas(containerRef.current);
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "px",
-      format: [canvas.width, canvas.height],
-    });
-    pdf.addImage(imgData, "PNG", 0, 0);
-    pdf.save("graficos.pdf");
+  const handleExport = async () => {
+    window.print(); // Exporta como PDF ou imagem via navegador
   };
-
-  if (loading) return <p className="p-4">Carregando gráficos...</p>;
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button onClick={() => navigate(-1)}>← Voltar</Button>
-        <Button variant="outline" onClick={handleExportImage}>Salvar como Imagem</Button>
-        <Button variant="outline" onClick={handleExportPDF}>Salvar como PDF</Button>
+    <div className="p-4">
+      <div className="flex justify-between mb-4">
+        <Button onClick={handleBack}>← Voltar</Button>
+        <Button onClick={handleExport}>📄 Exportar</Button>
       </div>
 
-      <div ref={containerRef} className="grid gap-6 mt-6">
-        {charts.length === 0 ? (
-          <p>Nenhum gráfico gerado até o momento.</p>
-        ) : (
-          charts.map((chart, index) => (
-            <ChartRenderer key={index} chart={chart} />
-          ))
-        )}
+      {charts.length === 0 && (
+        <p className="text-muted-foreground text-center">Nenhum gráfico disponível.</p>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {charts.map((chart, index) => (
+          <Card key={index} className="p-4">
+            <h3 className="text-lg font-semibold mb-2">{chart.title}</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                {chart.type === "bar" ? (
+                  <BarChart data={chart.labels.map((label, i) => ({ label, value: chart.data[i] }))}>
+                    <XAxis dataKey="label" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value" />
+                  </BarChart>
+                ) : chart.type === "pie" ? (
+                  <PieChart>
+                    <Pie data={chart.labels.map((label, i) => ({ name: label, value: chart.data[i] }))} dataKey="value" label>
+                      {chart.labels.map((_, i) => (
+                        <Cell key={i} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                ) : null}
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        ))}
       </div>
     </div>
   );
 };
 
-export default GraficosPage;
+export default Graficos;
