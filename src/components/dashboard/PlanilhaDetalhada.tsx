@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { ChartData, generateChartSet } from "@/utils/chartGeneration";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ChartRenderer } from "@/components/ChartRenderer";
+import ChartRenderer from "@/components/panel/ChartRenderer";
 
 interface DatabaseRow {
   row_index: number;
