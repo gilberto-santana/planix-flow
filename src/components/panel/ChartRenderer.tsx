@@ -1,97 +1,61 @@
+import { useEffect, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ChartData } from "@/utils/chartGeneration";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  ResponsiveContainer,
-  BarChart,
-  PieChart,
-  LineChart,
-  Bar,
-  Pie,
-  Line,
-  Cell,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-} from "recharts";
 
-interface ChartRendererProps {
+interface Props {
   chart: ChartData;
 }
 
-const ChartRenderer = ({ chart }: ChartRendererProps) => {
-  const chartData = chart.data.map((item) => ({
-    name: item.label,
-    value: item.value,
-  }));
+const ChartRenderer = ({ chart }: Props) => {
+  const [insight, setInsight] = useState<string | null>(null);
 
-  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#00C49F', '#FFBB28', '#FF8042'];
+  useEffect(() => {
+    if (!chart?.data || chart.data.length < 2) return;
 
-  const renderChart = () => {
-    if (chart.type === "bar") {
-      return (
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
+    const values = chart.data.map((d) => Number(d.value)).filter((v) => !isNaN(v));
+    if (values.length === 0) return;
+
+    const total = values.reduce((acc, v) => acc + v, 0);
+    const avg = total / values.length;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+
+    const first = values[0];
+    const last = values[values.length - 1];
+
+    const diff = last - first;
+    const percent = ((diff / first) * 100).toFixed(1);
+
+    let msg = "";
+
+    if (diff > 0) msg += `📈 Tendência de alta (${percent}% desde o início).\n`;
+    else if (diff < 0) msg += `📉 Tendência de queda (${percent}% desde o início).\n`;
+    else msg += "⏸️ Estável ao longo do tempo.\n";
+
+    msg += `🔢 Média: ${avg.toFixed(1)} | Máximo: ${max} | Mínimo: ${min}`;
+
+    setInsight(msg);
+  }, [chart]);
+
+  return (
+    <Card className="p-2">
+      <CardContent>
+        <h3 className="font-semibold text-sm mb-2">{chart.title}</h3>
+
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={chart.data}>
+            <XAxis dataKey="label" hide={chart.data.length > 30} />
             <YAxis />
             <Tooltip />
             <Bar dataKey="value" fill="#8884d8" />
           </BarChart>
         </ResponsiveContainer>
-      );
-    }
 
-    if (chart.type === "pie") {
-      return (
-        <ResponsiveContainer width="100%" height={300}>
-          <PieChart>
-            <Pie
-              data={chartData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-              label
-            >
-              {chartData.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-      );
-    }
-
-    if (chart.type === "line") {
-      return (
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Line dataKey="value" stroke="#8884d8" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
-      );
-    }
-
-    return null;
-  };
-
-  return (
-    <Card className="p-4">
-      <CardHeader>
-        <CardTitle className="text-lg font-semibold">{chart.title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {chartData.length === 0 ? (
-          <p className="text-muted-foreground text-sm">Nenhum dado disponível.</p>
-        ) : (
-          renderChart()
+        {insight && (
+          <div className="mt-3 text-xs whitespace-pre-wrap bg-muted p-2 rounded">
+            {insight}
+          </div>
         )}
       </CardContent>
     </Card>
