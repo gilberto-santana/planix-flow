@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
+import { useNavigate } from "react-router-dom";
 import { generateChartSet, ChartData, SpreadsheetRow } from "@/utils/chartGeneration";
 
 interface DatabaseRow {
@@ -20,12 +21,13 @@ interface DatabaseRow {
 export function useFileProcessing() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File, fileId: string, fileUrl: string): Promise<string | null> => {
-    if (!user) return null;
+  const handleFileUpload = async (file: File, fileId: string, fileUrl: string) => {
+    if (!user) return;
 
     setLoading(true);
     setFileName(file.name);
@@ -51,7 +53,6 @@ export function useFileProcessing() {
 
       let spreadsheetId = parseResult?.spreadsheetId;
 
-      // fallback: se não veio o ID da função, tenta buscar o mais recente criado
       if (!spreadsheetId) {
         console.warn("⚠️ spreadsheetId não retornado pela função. Buscando manualmente...");
 
@@ -68,7 +69,7 @@ export function useFileProcessing() {
             description: "Não foi possível encontrar o ID da planilha processada.",
           });
           setLoading(false);
-          return null;
+          return;
         }
 
         spreadsheetId = spreadsheets[0].id;
@@ -86,7 +87,7 @@ export function useFileProcessing() {
           description: "Erro ao buscar as abas da planilha.",
         });
         setLoading(false);
-        return null;
+        return;
       }
 
       const sheets = sheetsQuery.data || [];
@@ -96,7 +97,7 @@ export function useFileProcessing() {
           description: "Nenhuma aba foi encontrada nesta planilha.",
         });
         setLoading(false);
-        return null;
+        return;
       }
 
       const sheetIds = sheets.map((s) => s.id);
@@ -115,7 +116,7 @@ export function useFileProcessing() {
           description: "Erro ao buscar os dados da planilha.",
         });
         setLoading(false);
-        return null;
+        return;
       }
 
       const data = (dataQuery.data || []) as DatabaseRow[];
@@ -139,14 +140,14 @@ export function useFileProcessing() {
         description: `${generatedCharts.length} gráficos foram gerados.`,
       });
 
-      return spreadsheetId;
+      // Redireciona para a rota de gráficos por planilha
+      navigate(`/dashboard/stats?type=sheet&id=${spreadsheetId}`);
     } catch (err) {
       console.error("❌ Erro inesperado:", err);
       toast({
         title: "Erro inesperado",
         description: "Algo deu errado ao processar a planilha.",
       });
-      return null;
     } finally {
       setLoading(false);
     }
