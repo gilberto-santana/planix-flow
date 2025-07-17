@@ -1,4 +1,3 @@
-
 // src/hooks/useFileProcessing.ts
 
 import { useState } from "react";
@@ -25,8 +24,8 @@ export function useFileProcessing() {
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File, fileId: string, fileUrl: string) => {
-    if (!user) return;
+  const handleFileUpload = async (file: File, fileId: string, fileUrl: string): Promise<string | null> => {
+    if (!user) return null;
 
     setLoading(true);
     setFileName(file.name);
@@ -69,7 +68,7 @@ export function useFileProcessing() {
             description: "Não foi possível encontrar o ID da planilha processada.",
           });
           setLoading(false);
-          return;
+          return null;
         }
 
         spreadsheetId = spreadsheets[0].id;
@@ -87,7 +86,7 @@ export function useFileProcessing() {
           description: "Erro ao buscar as abas da planilha.",
         });
         setLoading(false);
-        return;
+        return null;
       }
 
       const sheets = sheetsQuery.data || [];
@@ -97,7 +96,7 @@ export function useFileProcessing() {
           description: "Nenhuma aba foi encontrada nesta planilha.",
         });
         setLoading(false);
-        return;
+        return null;
       }
 
       const sheetIds = sheets.map((s) => s.id);
@@ -116,7 +115,7 @@ export function useFileProcessing() {
           description: "Erro ao buscar os dados da planilha.",
         });
         setLoading(false);
-        return;
+        return null;
       }
 
       const data = (dataQuery.data || []) as DatabaseRow[];
@@ -139,12 +138,15 @@ export function useFileProcessing() {
         title: "Planilha processada com sucesso!",
         description: `${generatedCharts.length} gráficos foram gerados.`,
       });
+
+      return spreadsheetId;
     } catch (err) {
       console.error("❌ Erro inesperado:", err);
       toast({
         title: "Erro inesperado",
         description: "Algo deu errado ao processar a planilha.",
       });
+      return null;
     } finally {
       setLoading(false);
     }
