@@ -4,8 +4,7 @@ export interface ChartData {
   id?: string;
   type: "bar" | "pie" | "line";
   title: string;
-  labels: string[];
-  data: number[];
+  data: { label: string; value: number }[];
   sheetName?: string;
 }
 
@@ -35,7 +34,6 @@ export function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
 
   groupedBySheet.forEach((sheetRows, sheetName) => {
     const byRowIndex = new Map<number, Map<string, string | null>>();
-
     sheetRows.forEach((row) => {
       if (!byRowIndex.has(row.row_index)) {
         byRowIndex.set(row.row_index, new Map());
@@ -49,38 +47,35 @@ export function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
 
     if (sortedRows.length < 2) return;
 
-    const headers = Object.keys(sortedRows[0]);
+    const header = sortedRows[0];
     const dataRows = sortedRows.slice(1);
+    const keys = Object.keys(header);
 
-    // Gerar todos os pares coluna categórica vs valor numérico
-    for (let labelKey of headers) {
-      for (let valueKey of headers) {
-        if (labelKey === valueKey) continue;
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = 0; j < keys.length; j++) {
+        if (i === j) continue;
 
-        const labels: string[] = [];
-        const values: number[] = [];
+        const labelKey = keys[i];
+        const valueKey = keys[j];
+
+        const data: { label: string; value: number }[] = [];
 
         for (const row of dataRows) {
-          const label = row[labelKey];
-          const raw = row[valueKey];
-          const value = parseFloat(raw?.toString().replace(",", "."));
+          const rawLabel = row[labelKey];
+          const rawValue = row[valueKey];
+          const label = rawLabel?.toString().trim();
+          const value = parseFloat(rawValue?.toString().replace(",", "."));
 
-          if (
-            typeof label === "string" &&
-            label.trim() !== "" &&
-            !isNaN(value)
-          ) {
-            labels.push(label.trim());
-            values.push(value);
+          if (label && !isNaN(value)) {
+            data.push({ label, value });
           }
         }
 
-        if (labels.length > 0 && values.length > 0) {
+        if (data.length) {
           charts.push({
             type: "bar",
             title: `${sheetName} – ${valueKey} por ${labelKey}`,
-            labels,
-            data: values,
+            data,
             sheetName,
           });
         }
