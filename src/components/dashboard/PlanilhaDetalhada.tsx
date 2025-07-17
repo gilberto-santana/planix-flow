@@ -1,135 +1,97 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { ChartData, generateChartSet } from "@/utils/chartGeneration";
-import { Loader2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { ChartRenderer } from "@/components/panel/ChartRenderer";
+// src/pages/dashboard/stats/PlanilhaDetalhada.tsx
 
-interface DatabaseRow {
-  row_index: number;
-  column_name: string | null;
-  cell_value: string | null;
-  sheet_id: string;
-  id: string;
-  column_index: number;
-  created_at: string;
-  data_type: string | null;
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ArrowLeft } from "lucide-react";
+import ChartRenderer from "@/components/dashboard/ChartRenderer";
+
+interface ChartData {
+  title: string;
+  data: any[];
+  xAxisKey: string;
+  dataKey: string;
+  type: string;
 }
 
 const PlanilhaDetalhada = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const sheetId = searchParams.get("id");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [uploadDate, setUploadDate] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [charts, setCharts] = useState<ChartData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sheetNames, setSheetNames] = useState<Record<string, string>>({});
-  const [spreadsheetInfo, setSpreadsheetInfo] = useState<{
-    file_name: string;
-    created_at: string;
-    status: string;
-  } | null>(null);
-
-  const searchParams = new URLSearchParams(location.search);
-  const spreadsheetId = searchParams.get("id");
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!spreadsheetId) return;
+    if (!sheetId) return;
 
-      setLoading(true);
-
-      const { data: spreadsheetData } = await supabase
-        .from("spreadsheets")
-        .select("file_name, created_at, status")
-        .eq("id", spreadsheetId)
+    const fetchSheetInfo = async () => {
+      const { data, error } = await supabase
+        .from("sheets")
+        .select("spreadsheet_id, sheet_name, created_at, status, spreadsheets(file_name, created_at)")
+        .eq("id", sheetId)
         .single();
 
-      if (spreadsheetData) {
-        setSpreadsheetInfo(spreadsheetData);
+      if (data) {
+        setFileName(data.spreadsheets?.file_name || "Desconhecido");
+        setUploadDate(new Date(data.spreadsheets?.created_at).toLocaleDateString());
+        setStatus(data.status || "indefinido");
       }
-
-      const { data: sheets, error: sheetsError } = await supabase
-        .from("sheets")
-        .select("id, sheet_name")
-        .eq("spreadsheet_id", spreadsheetId);
-
-      if (sheetsError || !sheets) {
-        toast({ title: "Erro", description: "Erro ao buscar abas da planilha." });
-        setLoading(false);
-        return;
-      }
-
-      const sheetMap = Object.fromEntries(sheets.map((s) => [s.id, s.sheet_name]));
-      setSheetNames(sheetMap);
-      const sheetIds = sheets.map((s) => s.id);
-
-      const { data: rows, error: rowsError } = await supabase
-        .from("spreadsheet_data")
-        .select("*")
-        .in("sheet_id", sheetIds)
-        .order("row_index", { ascending: true });
-
-      if (rowsError || !rows) {
-        toast({ title: "Erro", description: "Erro ao buscar dados da planilha." });
-        setLoading(false);
-        return;
-      }
-
-      const normalized = rows.map((row: DatabaseRow) => ({
-        row_index: row.row_index,
-        column_name: row.column_name || "",
-        cell_value: row.cell_value || "",
-        sheet_id: row.sheet_id,
-        sheet_name: sheetMap[row.sheet_id] || "Aba",
-        column_index: row.column_index,
-        created_at: row.created_at,
-        data_type: row.data_type,
-      }));
-
-      const charts = generateChartSet(normalized);
-      setCharts(charts);
-      setLoading(false);
     };
 
-    fetchData();
-  }, [spreadsheetId]);
+    const fetchCharts = async () => {
+      const { data, error } = await supabase
+        .from("charts")
+        .select("*")
+        .eq("sheet_id", sheetId);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="animate-spin w-6 h-6 mr-2" />
-        Carregando gráficos da planilha...
-      </div>
-    );
-  }
+      if (data) {
+        const parsedCharts = data.map((chart: any) => ({
+          title: chart.title,
+          data: chart.data,
+          xAxisKey: chart.x_axis_key,
+          dataKey: "value",
+          type: chart.type,
+        }));
+        setCharts(parsedCharts);
+      }
+    };
 
-  const formatDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    fetchSheetInfo();
+    fetchCharts();
+  }, [sheetId]);
 
   return (
-    <div className="p-4 space-y-4">
-      <button onClick={() => navigate("/dashboard")} className="text-sm underline mb-2">
-        ← Voltar para Dashboard
-      </button>
+    <div className="p-6">
+      <Button variant="outline" className="mb-4" onClick={() => navigate("/dashboard")}>
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Voltar
+      </Button>
 
-      {spreadsheetInfo && (
-        <div className="rounded border p-4 bg-muted">
-          <p><strong>Nome:</strong> {spreadsheetInfo.file_name}</p>
-          <p><strong>Data de Upload:</strong> {formatDate(spreadsheetInfo.created_at)}</p>
-          <p><strong>Status:</strong> {spreadsheetInfo.status === "processed" ? "Processado" : "Pendente"}</p>
-        </div>
-      )}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-2">Detalhes da Planilha</h2>
+        <p><strong>Nome:</strong> {fileName}</p>
+        <p><strong>Data de Upload:</strong> {uploadDate}</p>
+        <p><strong>Status:</strong> {status}</p>
+      </div>
 
-      <h2 className="text-xl font-bold">Gráficos Gerados ({charts.length})</h2>
-
-      {charts.length === 0 ? (
-        <p>Nenhum gráfico foi gerado para esta planilha.</p>
-      ) : (
-        charts.map((chart, idx) => (
-          <ChartRenderer key={idx} chart={chart} />
-        ))
-      )}
+      <h3 className="text-lg font-semibold mb-4">Gráficos Gerados ({charts.length})</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {charts.map((chart, index) => (
+          <Card key={index} className="p-4">
+            <ChartRenderer
+              title={chart.title}
+              data={chart.data}
+              xAxisKey={chart.xAxisKey}
+              dataKey={chart.dataKey}
+              type={chart.type}
+            />
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };
