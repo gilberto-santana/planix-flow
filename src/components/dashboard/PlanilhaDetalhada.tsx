@@ -1,12 +1,10 @@
-// src/pages/dashboard/PlanilhaDetalhada.tsx
-
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { ChartData, generateChartSet } from "@/utils/chartGeneration";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import ChartRenderer from "@/components/panel/ChartRenderer";
+import { ChartRenderer } from "@/components/panel/ChartRenderer";
 
 interface DatabaseRow {
   row_index: number;
@@ -21,10 +19,16 @@ interface DatabaseRow {
 
 const PlanilhaDetalhada = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
   const [sheetNames, setSheetNames] = useState<Record<string, string>>({});
+  const [spreadsheetInfo, setSpreadsheetInfo] = useState<{
+    file_name: string;
+    created_at: string;
+    status: string;
+  } | null>(null);
 
   const searchParams = new URLSearchParams(location.search);
   const spreadsheetId = searchParams.get("id");
@@ -35,23 +39,29 @@ const PlanilhaDetalhada = () => {
 
       setLoading(true);
 
+      const { data: spreadsheetData } = await supabase
+        .from("spreadsheets")
+        .select("file_name, created_at, status")
+        .eq("id", spreadsheetId)
+        .single();
+
+      if (spreadsheetData) {
+        setSpreadsheetInfo(spreadsheetData);
+      }
+
       const { data: sheets, error: sheetsError } = await supabase
         .from("sheets")
         .select("id, sheet_name")
         .eq("spreadsheet_id", spreadsheetId);
 
       if (sheetsError || !sheets) {
-        toast({
-          title: "Erro",
-          description: "Erro ao buscar abas da planilha.",
-        });
+        toast({ title: "Erro", description: "Erro ao buscar abas da planilha." });
         setLoading(false);
         return;
       }
 
       const sheetMap = Object.fromEntries(sheets.map((s) => [s.id, s.sheet_name]));
       setSheetNames(sheetMap);
-
       const sheetIds = sheets.map((s) => s.id);
 
       const { data: rows, error: rowsError } = await supabase
@@ -61,10 +71,7 @@ const PlanilhaDetalhada = () => {
         .order("row_index", { ascending: true });
 
       if (rowsError || !rows) {
-        toast({
-          title: "Erro",
-          description: "Erro ao buscar dados da planilha.",
-        });
+        toast({ title: "Erro", description: "Erro ao buscar dados da planilha." });
         setLoading(false);
         return;
       }
@@ -97,9 +104,25 @@ const PlanilhaDetalhada = () => {
     );
   }
 
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
   return (
     <div className="p-4 space-y-4">
-      <h2 className="text-xl font-bold">Gráficos da Planilha</h2>
+      <button onClick={() => navigate("/dashboard")} className="text-sm underline mb-2">
+        ← Voltar para Dashboard
+      </button>
+
+      {spreadsheetInfo && (
+        <div className="rounded border p-4 bg-muted">
+          <p><strong>Nome:</strong> {spreadsheetInfo.file_name}</p>
+          <p><strong>Data de Upload:</strong> {formatDate(spreadsheetInfo.created_at)}</p>
+          <p><strong>Status:</strong> {spreadsheetInfo.status === "processed" ? "Processado" : "Pendente"}</p>
+        </div>
+      )}
+
+      <h2 className="text-xl font-bold">Gráficos Gerados ({charts.length})</h2>
+
       {charts.length === 0 ? (
         <p>Nenhum gráfico foi gerado para esta planilha.</p>
       ) : (
