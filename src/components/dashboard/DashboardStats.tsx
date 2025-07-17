@@ -1,7 +1,12 @@
 // src/components/dashboard/DashboardStats.tsx
-import { useNavigate } from 'react-router-dom';
 
-export default function DashboardStats({ stats }: { stats: any }) {
+import { useNavigate } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
+import { FileText, Upload, BarChart2, Clock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
+const DashboardStats = () => {
   const navigate = useNavigate();
   const [totalPlanilhas, setTotalPlanilhas] = useState(0);
   const [totalAbas, setTotalAbas] = useState(0);
@@ -33,40 +38,67 @@ export default function DashboardStats({ stats }: { stats: any }) {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <div
-        className="rounded-xl border bg-card text-card-foreground shadow p-6 cursor-pointer hover:bg-muted/30"
-        onClick={() => navigate('/dashboard/stats?type=all-files')}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Card
+        onClick={() => navigate("/dashboard/stats?type=all-files")}
+        className="cursor-pointer hover:shadow-md transition"
       >
-        <div className="text-sm text-muted-foreground">Total de Planilhas</div>
-        <div className="text-2xl font-bold">{stats.totalSpreadsheets}</div>
-        <div className="text-xs text-muted-foreground">Planilhas carregadas</div>
-      </div>
+        <CardContent className="p-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h4 className="text-sm font-medium">Total de Planilhas</h4>
+              <p className="text-2xl font-bold">{totalPlanilhas}</p>
+              <p className="text-muted-foreground text-sm">Planilhas carregadas</p>
+            </div>
+            <FileText className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <div className="rounded-xl border bg-card text-card-foreground shadow p-6">
-        <div className="text-sm text-muted-foreground">Abas Processadas</div>
-        <div className="text-2xl font-bold">{stats.totalSheets}</div>
-        <div className="text-xs text-muted-foreground">Abas de planilhas</div>
-      </div>
+      <Card className="cursor-default">
+        <CardContent className="p-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h4 className="text-sm font-medium">Abas Processadas</h4>
+              <p className="text-2xl font-bold">{totalAbas}</p>
+              <p className="text-muted-foreground text-sm">Abas de planilhas</p>
+            </div>
+            <Upload className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <div
-        className="rounded-xl border bg-card text-card-foreground shadow p-6 cursor-pointer hover:bg-muted/30"
-        onClick={() => navigate('/dashboard/stats?type=charts')}
+      <Card
+        onClick={() => navigate("/dashboard/stats?type=charts")}
+        className="cursor-pointer hover:shadow-md transition"
       >
-        <div className="text-sm text-muted-foreground">Gráficos Gerados</div>
-        <div className="text-2xl font-bold">{stats.totalCharts}</div>
-        <div className="text-xs text-muted-foreground">Visualizações criadas</div>
-      </div>
+        <CardContent className="p-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h4 className="text-sm font-medium">Gráficos Gerados</h4>
+              <p className="text-2xl font-bold">{totalGraficos}</p>
+              <p className="text-muted-foreground text-sm">Visualizações criadas</p>
+            </div>
+            <BarChart2 className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
 
-      <div
-        className="rounded-xl border bg-card text-card-foreground shadow p-6 cursor-pointer hover:bg-muted/30"
-        onClick={() => navigate('/dashboard/stats?type=recent-files')}
+      <Card
+        onClick={() => navigate("/dashboard/stats?type=recent")}
+        className="cursor-pointer hover:shadow-md transition"
       >
-        <div className="text-sm text-muted-foreground">Uploads Recentes</div>
-        <div className="text-2xl font-bold">{stats.totalRecentUploads}</div>
-        <div className="text-xs text-muted-foreground">Últimos 7 dias
-        </div>
-      </div>
+        <CardContent className="p-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h4 className="text-sm font-medium">Uploads Recentes</h4>
+              <p className="text-2xl font-bold">{uploadsRecentes}</p>
+              <p className="text-muted-foreground text-sm">Últimos 7 dias</p>
+            </div>
+            <Clock className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };
