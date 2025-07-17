@@ -1,11 +1,23 @@
 // src/pages/dashboard/stats/Index.tsx
 
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import AllFiles from "@/components/dashboard/AllFiles";
+import UploadsRecentes from "@/components/dashboard/UploadsRecentes";
+import GraficosGerados from "@/components/dashboard/GraficosGerados";
+import PlanilhaDetalhada from "@/pages/dashboard/PlanilhaDetalhada";
 import { Card } from "@/components/ui/card";
 import { BarChart3, FileText, Clock4, Layers3 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const StatsIndex = () => {
+  const searchParams = new URLSearchParams(useLocation().search);
+  const type = searchParams.get("type");
   const navigate = useNavigate();
+
+  if (type === "all-files" || type === "planilhas") return <AllFiles />;
+  if (type === "recent" || type === "recentes") return <UploadsRecentes />;
+  if (type === "charts" || type === "graficos") return <GraficosGerados />;
+  if (type === "sheet") return <PlanilhaDetalhada />;
 
   return (
     <div className="p-6">
