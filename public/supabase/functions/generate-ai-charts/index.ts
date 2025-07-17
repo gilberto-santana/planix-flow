@@ -1,5 +1,3 @@
-// supabase/functions/generate-ai-charts/index.ts
-
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.5.2";
