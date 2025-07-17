@@ -1,18 +1,20 @@
 // src/pages/dashboard/stats/Index.tsx
 
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import AllFiles from "@/components/dashboard/AllFiles";
 import UploadsRecentes from "@/components/dashboard/UploadsRecentes";
 import GraficosGerados from "@/components/dashboard/GraficosGerados";
 import PlanilhaDetalhada from "@/pages/dashboard/PlanilhaDetalhada";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { BarChart3, FileText, Clock4, Layers3 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { FileText, BarChart3, Clock4, Layers3 } from "lucide-react";
 
 const StatsIndex = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const searchParams = new URLSearchParams(useLocation().search);
   const type = searchParams.get("type");
-  const navigate = useNavigate();
 
   if (type === "all-files" || type === "planilhas") return <AllFiles />;
   if (type === "recent" || type === "recentes") return <UploadsRecentes />;
@@ -21,7 +23,20 @@ const StatsIndex = () => {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-semibold mb-4">Estatísticas</h1>
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard de Planilhas</h1>
+          <p className="text-muted-foreground">
+            Faça upload de suas planilhas e visualize dados através de gráficos interativos
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm">{user?.email}</p>
+          <Button variant="outline" size="sm" onClick={() => navigate("/")}>
+            Sair
+          </Button>
+        </div>
+      </div>
 
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
         <Card
