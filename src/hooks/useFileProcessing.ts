@@ -5,7 +5,7 @@ import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
 import { useNavigate } from "react-router-dom";
-import { generateChartSet, ChartData, SpreadsheetRow } from "@/utils/chartGeneration";
+import { ChartData } from "@/utils/chartGeneration";
 
 interface DatabaseRow {
   row_index: number;
@@ -67,7 +67,18 @@ export function useFileProcessing() {
         spreadsheetId = spreadsheets[0].id;
       }
 
-      // ✅ Atualiza status para "processed"
+      // ✅ Chamada Gemini para gerar gráficos AI
+      const { data: aiResult, error: aiError } = await supabase.functions.invoke("generate-ai-charts", {
+        body: JSON.stringify({ spreadsheetId }),
+      });
+
+      if (aiError) {
+        console.error("Erro Gemini:", aiError);
+      } else {
+        setCharts(aiResult?.charts ?? []);
+      }
+
+      // ✅ Atualiza status da planilha
       await supabase
         .from("spreadsheets")
         .update({ status: "processed" })
