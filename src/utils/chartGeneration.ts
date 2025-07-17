@@ -1,4 +1,3 @@
-
 // src/utils/chartGeneration.ts
 
 export interface ChartData {
@@ -50,40 +49,43 @@ export function generateChartSet(rows: SpreadsheetRow[]): ChartData[] {
 
     if (sortedRows.length < 2) return;
 
-    const header = sortedRows[0];
-    const keys = Object.keys(header);
-    const chartsPerSheet: ChartData[] = [];
+    const headers = Object.keys(sortedRows[0]);
+    const dataRows = sortedRows.slice(1);
 
-    for (let i = 1; i < keys.length; i++) {
-      const labelKey = keys[0];
-      const valueKey = keys[i];
+    // Gerar todos os pares coluna categórica vs valor numérico
+    for (let labelKey of headers) {
+      for (let valueKey of headers) {
+        if (labelKey === valueKey) continue;
 
-      const labels: string[] = [];
-      const data: number[] = [];
+        const labels: string[] = [];
+        const values: number[] = [];
 
-      for (let j = 1; j < sortedRows.length; j++) {
-        const row = sortedRows[j];
-        const label = row[labelKey];
-        const value = parseFloat(row[valueKey]);
+        for (const row of dataRows) {
+          const label = row[labelKey];
+          const raw = row[valueKey];
+          const value = parseFloat(raw?.toString().replace(",", "."));
 
-        if (label && !isNaN(value)) {
-          labels.push(label);
-          data.push(value);
+          if (
+            typeof label === "string" &&
+            label.trim() !== "" &&
+            !isNaN(value)
+          ) {
+            labels.push(label.trim());
+            values.push(value);
+          }
+        }
+
+        if (labels.length > 0 && values.length > 0) {
+          charts.push({
+            type: "bar",
+            title: `${sheetName} – ${valueKey} por ${labelKey}`,
+            labels,
+            data: values,
+            sheetName,
+          });
         }
       }
-
-      if (labels.length && data.length) {
-        chartsPerSheet.push({
-          title: `${sheetName} - ${valueKey}`,
-          labels,
-          data,
-          type: "bar",
-          sheetName,
-        });
-      }
     }
-
-    charts.push(...chartsPerSheet);
   });
 
   return charts;
