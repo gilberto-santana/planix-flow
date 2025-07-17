@@ -1,7 +1,8 @@
+
 // src/components/panel/Dashboard.tsx
 
 import { DashboardHeader } from "./DashboardHeader";
-import { DashboardStats } from "./DashboardStats";
+import DashboardStats from "./DashboardStats";
 import FileUpload from "./FileUpload"; // corrigido: importação como default
 import { ChartsSection } from "./ChartsSection";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
