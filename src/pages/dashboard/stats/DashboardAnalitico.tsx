@@ -3,79 +3,43 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { ChartData } from "@/utils/chartGeneration";
 import ChartRenderer from "@/components/panel/ChartRenderer";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+
+interface ChartData {
+  title: string;
+  type: string;
+  x: string[];
+  y: number[];
+}
+
+interface SpreadsheetRow {
+  sheet_id: string;
+  row_index: number;
+  column_name: string;
+  cell_value: string;
+}
 
 const DashboardAnalitico = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const [charts, setCharts] = useState<ChartData[]>([]);
-  const [recommendations, setRecommendations] = useState<string[]>([]);
+  const [recomendacoes, setRecomendacoes] = useState<string[]>([]);
   const chartsRef = useRef<HTMLDivElement>(null);
 
-  const searchParams = new URLSearchParams(location.search);
-  const spreadsheetId = searchParams.get("id");
+  const sheetId = new URLSearchParams(location.search).get("id");
 
   const handleBack = () => {
     navigate("/dashboard/stats?type=home");
-  };
-
-  const fetchChartData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("spreadsheet_data")
-        .select("*")
-        .eq("spreadsheet_id", spreadsheetId);
-
-      if (error) throw error;
-
-      const response = await fetch("/api/chart-generator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: data }),
-      });
-
-      const result = await response.json();
-      setCharts(result);
-      generateRecommendations(data);
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Erro", description: "Erro ao buscar dados para análise." });
-    }
-  };
-
-  const generateRecommendations = (rows: any[]) => {
-    const recs: string[] = [];
-    const colunas = [...new Set(rows.map((r) => r.column_name))];
-    const colunasLower = colunas.map((c) => c?.toLowerCase());
-
-    if (colunasLower.includes("data") || colunasLower.includes("mês")) {
-      recs.push("✅ Os dados possuem colunas de tempo. Você pode acompanhar a evolução ao longo dos meses.");
-    }
-    if (colunasLower.includes("quantidade") || colunasLower.includes("estoque")) {
-      recs.push("📦 A planilha tem controle de quantidade. Avalie itens com baixa saída ou excesso de estoque.");
-    }
-    if (colunasLower.includes("valor") || colunasLower.includes("preço")) {
-      recs.push("💰 Existem colunas financeiras. Avalie o faturamento e os produtos mais rentáveis.");
-    }
-    if (colunasLower.includes("categoria") || colunasLower.includes("produto")) {
-      recs.push("📊 A presença de categorias permite comparar desempenho entre grupos.");
-    }
-    if (colunasLower.includes("rede social") || colunasLower.includes("postagem")) {
-      recs.push("📣 Identificamos colunas de mídia. Avalie o engajamento das postagens.");
-    }
-
-    setRecommendations(recs);
   };
 
   const downloadAsImage = async () => {
     if (!chartsRef.current) return;
     const canvas = await html2canvas(chartsRef.current);
     const link = document.createElement("a");
-    link.download = "dashboard.png";
+    link.download = "dashboard-analitico.png";
     link.href = canvas.toDataURL("image/png");
     link.click();
   };
@@ -89,12 +53,64 @@ const DashboardAnalitico = () => {
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
     pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    pdf.save("dashboard.pdf");
+    pdf.save("dashboard-analitico.pdf");
+  };
+
+  const fetchData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("spreadsheet_data")
+        .select("sheet_id, row_index, column_name, cell_value")
+        .eq("sheet_id", sheetId);
+
+      if (error) throw error;
+      if (!data || data.length === 0) return;
+
+      const rowsMap = new Map<number, Record<string, string>>();
+      data.forEach((row) => {
+        if (!rowsMap.has(row.row_index)) {
+          rowsMap.set(row.row_index, {});
+        }
+        rowsMap.get(row.row_index)![row.column_name] = row.cell_value;
+      });
+      const rows = Array.from(rowsMap.values());
+
+      const columnNames = Object.keys(rows[0] || {});
+      const detected: ChartData[] = [];
+      const insights: string[] = [];
+
+      columnNames.forEach((xKey) => {
+        columnNames.forEach((yKey) => {
+          if (xKey !== yKey) {
+            const xValues = rows.map((r) => r[xKey]);
+            const yValues = rows.map((r) => parseFloat(r[yKey]));
+            const valid = yValues.every((y) => !isNaN(y));
+            if (valid) {
+              detected.push({
+                title: `${xKey} vs ${yKey}`,
+                type: "bar",
+                x: xValues,
+                y: yValues,
+              });
+              insights.push(
+                `Verifique se há correlação entre "${xKey}" e "${yKey}" — os dados sugerem uma possível relação.`
+              );
+            }
+          }
+        });
+      });
+
+      setCharts(detected);
+      setRecomendacoes(insights.slice(0, 5));
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Erro", description: "Não foi possível carregar os dados." });
+    }
   };
 
   useEffect(() => {
-    fetchChartData();
-  }, []);
+    if (sheetId) fetchData();
+  }, [sheetId]);
 
   return (
     <div className="p-4 space-y-6">
@@ -102,24 +118,27 @@ const DashboardAnalitico = () => {
         <Button onClick={handleBack}>← Voltar</Button>
         <div className="flex gap-2">
           <Button variant="outline" onClick={downloadAsImage}>
-            Baixar como Imagem
+            Baixar Imagem
           </Button>
           <Button variant="outline" onClick={downloadAsPDF}>
-            Baixar como PDF
+            Baixar PDF
           </Button>
         </div>
       </div>
 
-      <h2 className="text-xl font-bold">Análise Automática</h2>
+      <h2 className="text-xl font-bold">Dashboard Analítico</h2>
+      <p className="text-muted-foreground">Gráficos gerados automaticamente + recomendações com base nos dados.</p>
 
-      <div className="bg-muted text-muted-foreground p-4 rounded-xl space-y-2">
-        {recommendations.length === 0 && <p>🤖 Nenhuma sugestão gerada.</p>}
-        {recommendations.map((rec, i) => (
-          <p key={i}>👉 {rec}</p>
-        ))}
+      <div className="space-y-2">
+        <h3 className="font-semibold">Recomendações Visuais:</h3>
+        <ul className="list-disc list-inside text-sm">
+          {recomendacoes.map((rec, i) => (
+            <li key={i}>{rec}</li>
+          ))}
+        </ul>
       </div>
 
-      <div ref={chartsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+      <div ref={chartsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {charts.map((chart, i) => (
           <ChartRenderer key={i} chart={chart} />
         ))}
