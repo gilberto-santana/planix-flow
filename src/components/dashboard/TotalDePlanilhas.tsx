@@ -1,73 +1,104 @@
+
 // src/components/dashboard/TotalDePlanilhas.tsx
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
+import { formatDistanceToNow } from "date-fns";
 
-interface Spreadsheet {
+interface Planilha {
   id: string;
   file_name: string;
   created_at: string;
+  processing_status: string;
+  sheet_count: number | null;
 }
 
 const TotalDePlanilhas = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [spreadsheets, setSpreadsheets] = useState<Spreadsheet[]>([]);
+  const [planilhas, setPlanilhas] = useState<Planilha[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchSpreadsheets = async () => {
-    const { data, error } = await supabase
-      .from("spreadsheets")
-      .select("*")
-      .order("created_at", { ascending: false });
+  useEffect(() => {
+    if (!user) return;
 
-    if (!error && data) {
-      setSpreadsheets(data);
-    }
+    const fetchPlanilhas = async () => {
+      const { data, error } = await supabase
+        .from("spreadsheets")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-    setLoading(false);
-  };
+      if (!error && data) {
+        setPlanilhas(data);
+      }
+      setLoading(false);
+    };
+
+    fetchPlanilhas();
+  }, [user]);
 
   const handleBack = () => {
     navigate("/dashboard/stats?type=home");
   };
 
-  useEffect(() => {
-    fetchSpreadsheets();
-  }, []);
+  const handleViewPlanilha = (id: string) => {
+    navigate(`/dashboard/stats?type=sheet&id=${id}`);
+  };
+
+  if (loading) {
+    return <div className="p-4">Carregando...</div>;
+  }
 
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Total de Planilhas</h1>
         <Button onClick={handleBack}>← Voltar</Button>
       </div>
 
-      <h2 className="text-xl font-bold">Total de Planilhas</h2>
-
-      {loading ? (
-        <p>Carregando arquivos...</p>
-      ) : spreadsheets.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum arquivo enviado ainda.</p>
-      ) : (
-        <ul className="space-y-3">
-          {spreadsheets.map((spreadsheet) => (
-            <li
-              key={spreadsheet.id}
-              className="border rounded-lg p-4 shadow-sm flex justify-between items-center"
-            >
-              <span className="font-medium">{spreadsheet.file_name}</span>
-              <span className="text-sm text-muted-foreground">
-                {format(new Date(spreadsheet.created_at), "dd 'de' MMMM 'de' yyyy - HH:mm", {
-                  locale: ptBR,
-                })}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="grid gap-4">
+        {planilhas.length === 0 ? (
+          <p className="text-muted-foreground">Nenhuma planilha encontrada.</p>
+        ) : (
+          planilhas.map((planilha) => (
+            <Card key={planilha.id} className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardHeader>
+                <CardTitle className="text-lg">{planilha.file_name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-between items-center">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Enviado {formatDistanceToNow(new Date(planilha.created_at), { 
+                        addSuffix: true, 
+                        locale: ptBR 
+                      })}
+                    </p>
+                    <p className="text-sm">
+                      Status: <span className="font-medium">{planilha.processing_status}</span>
+                    </p>
+                    <p className="text-sm">
+                      Abas: {planilha.sheet_count || 0}
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={() => handleViewPlanilha(planilha.id)}
+                    variant="outline"
+                  >
+                    Ver Detalhes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 };
