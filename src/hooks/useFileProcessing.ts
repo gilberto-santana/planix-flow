@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -111,12 +112,18 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("📊 Enviando dados para IA:", { totalRows: rows.length, sampleData: rows.slice(0, 3) });
+
+      // CORREÇÃO: Remover JSON.stringify() e headers manuais
+      // Deixar o Supabase gerenciar automaticamente a serialização
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: rows }) // CORRIGIDO AQUI
+        body: { data: rows }
       });
 
+      console.log("🤖 Resposta da IA:", aiResult);
+
       if (aiResult.error) {
+        console.error("❌ Erro da Edge Function:", aiResult.error);
         toast({ 
           title: "Erro ao gerar gráficos com IA", 
           description: aiResult.error.message,
@@ -136,6 +143,7 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("✅ Gráficos gerados:", aiResult.data.chartConfig);
       setCharts(aiResult.data.chartConfig);
       toast({ 
         title: "Gráficos gerados com sucesso!", 
@@ -143,6 +151,7 @@ export function useFileProcessing() {
       });
 
     } catch (err) {
+      console.error("❌ Erro inesperado no upload:", err);
       toast({ 
         title: "Erro inesperado no upload", 
         description: err instanceof Error ? err.message : "Erro desconhecido",
