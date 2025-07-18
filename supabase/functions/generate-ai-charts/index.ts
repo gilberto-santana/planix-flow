@@ -30,7 +30,6 @@ serve(async (req) => {
       return new Response("Erro ao buscar dados da planilha", { status: 500 });
     }
 
-    // Converte os dados em linhas estruturadas
     const linhas: Record<string, string>[] = [];
     const mapa = new Map<number, Record<string, string>>();
 
@@ -63,34 +62,52 @@ Dados:
 ${JSON.stringify(linhas)}
     `.trim();
 
-    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + geminiApiKey, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    });
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiApiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    );
 
     if (!geminiResponse.ok) {
-      const msg = await geminiResponse.text();
-      console.error("Erro na chamada Gemini:", msg);
-      return new Response("Erro ao chamar o Gemini: " + msg, { status: 500 });
+      const erroTexto = await geminiResponse.text();
+      console.error("Erro da API Gemini:", erroTexto);
+      return new Response("Erro na chamada Gemini: " + erroTexto, { status: 500 });
     }
 
-    const geminiJson = await geminiResponse.json();
-    const content = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    let geminiJson;
+    try {
+      geminiJson = await geminiResponse.json();
+    } catch (jsonError) {
+      console.error("Erro ao parsear resposta da Gemini:", jsonError);
+      return new Response("Resposta inválida da Gemini", { status: 500 });
+    }
+
+    const content = geminiJson?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!content) {
-      return new Response("Resposta vazia do Gemini", { status: 500 });
+      console.error("Resposta sem conteúdo do Gemini:", geminiJson);
+      return new Response("Resposta da Gemini sem conteúdo", { status: 500 });
     }
 
-    const charts = JSON.parse(content);
+    let charts;
+    try {
+      charts = JSON.parse(content);
+    } catch (parseError) {
+      console.error("Erro ao fazer JSON.parse do conteúdo do Gemini:", parseError, content);
+      return new Response("Conteúdo da Gemini inválido (não é JSON)", { status: 500 });
+    }
+
     return new Response(JSON.stringify(charts), {
-      headers: { "Content-Type": "application/json" }
+      headers: { "Content-Type": "application/json" },
     });
 
   } catch (err) {
     console.error("Erro geral:", err);
-    return new Response("Erro interno na função: " + String(err), { status: 500 });
+    return new Response("Erro interno: " + String(err), { status: 500 });
   }
 });
