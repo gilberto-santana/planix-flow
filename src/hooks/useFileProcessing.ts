@@ -127,7 +127,7 @@ export function useFileProcessing() {
 
       // Call AI chart generation
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify({ rows }) // <- CORREÇÃO AQUI
+        body: JSON.stringify({ rows }) // CORREÇÃO AQUI
       });
 
       console.log("🤖 Resultado da IA:", aiResult);
