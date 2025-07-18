@@ -13,52 +13,41 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    let body: any;
+    let payload = {};
     try {
-      body = await req.json();
-    } catch (err) {
-      console.error("Erro ao ler JSON:", err);
-      return new Response(JSON.stringify({ error: "Invalid or missing JSON body." }), { status: 400 });
+      payload = await req.json();
+    } catch (error) {
+      console.error("Erro ao ler JSON:", error);
+      return new Response(JSON.stringify({ error: "Body inválido ou ausente no JSON." }), { status: 400 });
     }
 
-    const { sheet_id } = body;
-    if (!sheet_id) {
-      return new Response(JSON.stringify({ error: "Missing sheet_id in body." }), { status: 400 });
+    const { rows } = payload as { rows: any[] };
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return new Response(JSON.stringify({ error: "Nenhum dado recebido." }), { status: 400 });
     }
-
-    // Buscar os dados da planilha
-    const { data: rows, error } = await supabase
-      .from("spreadsheet_data")
-      .select("column_name, row_index, cell_value")
-      .eq("sheet_id", sheet_id);
-
-    if (error || !rows || rows.length === 0) {
-      return new Response(JSON.stringify({ error: "No data found for this sheet." }), { status: 404 });
-    }
-
-    // Estrutura os dados para o prompt
-    const formatted = rows.map((r) => ({
-      column: r.column_name,
-      row: r.row_index,
-      value: r.cell_value,
-    }));
 
     const prompt = `
-Você é um assistente de análise de dados. Abaixo está um conjunto de dados extraído de uma planilha.
-Gere até 10 gráficos úteis e variados com base nos dados. Para cada gráfico, forneça um título e um objeto JSON no formato:
+Você é um gerador de gráficos de dados em JSON.
+Gere até 10 gráficos úteis baseados nos dados abaixo. Use os dados diretamente para sugerir agrupamentos, séries temporais, totais por categoria, etc.
+Retorne apenas JSON no formato:
 
-{
-  "type": "bar" | "line" | "pie",
-  "title": "Título do gráfico",
-  "x": [array de valores do eixo X],
-  "y": [array de valores do eixo Y]
-}
+[
+  {
+    "title": "Título do gráfico",
+    "type": "bar" | "line" | "pie",
+    "x": [array de categorias ou datas],
+    "y": [array de valores],
+    "xLabel": "Eixo X",
+    "yLabel": "Eixo Y"
+  },
+  ...
+]
 
-Aqui estão os dados:
-${JSON.stringify(formatted)}
+DADOS:
+${JSON.stringify(rows)}
 `;
 
-    const geminiResponse = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY, {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -73,21 +62,25 @@ ${JSON.stringify(formatted)}
       }),
     });
 
-    const geminiJson = await geminiResponse.json();
-    const text = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    const result = await response.json();
+    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const jsonStart = text.indexOf("[");
+    const jsonEnd = text.lastIndexOf("]") + 1;
+    const jsonString = text.slice(jsonStart, jsonEnd);
 
-    if (!text) {
-      return new Response(JSON.stringify({ error: "Failed to get response from Gemini." }), { status: 500 });
+    let charts = [];
+    try {
+      charts = JSON.parse(jsonString);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: "Falha ao parsear o JSON retornado pela IA." }), { status: 500 });
     }
-
-    // Extrair os gráficos do texto retornado (assumindo JSON válido no corpo)
-    const charts = JSON.parse(text);
 
     return new Response(JSON.stringify({ charts }), {
       headers: { "Content-Type": "application/json" },
+      status: 200,
     });
-  } catch (e) {
-    console.error("Erro geral:", e);
-    return new Response(JSON.stringify({ error: "Erro interno no servidor." }), { status: 500 });
+  } catch (err) {
+    console.error("Erro geral:", err);
+    return new Response(JSON.stringify({ error: "Erro interno." }), { status: 500 });
   }
 });
