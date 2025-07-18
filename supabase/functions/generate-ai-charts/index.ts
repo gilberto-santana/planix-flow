@@ -14,14 +14,18 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     let payload: any;
+
+    // Verifica se o Content-Type é application/json
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      return new Response(JSON.stringify({ error: "Content-Type inválido. Esperado application/json." }), { status: 400 });
+    }
+
     try {
-      if (!req.body) {
-        return new Response(JSON.stringify({ error: "Requisição sem corpo." }), { status: 400 });
-      }
       payload = await req.json();
     } catch (error) {
-      console.error("Erro ao ler JSON:", error);
-      return new Response(JSON.stringify({ error: "Body inválido ou ausente no JSON." }), { status: 400 });
+      console.error("Erro ao parsear JSON:", error);
+      return new Response(JSON.stringify({ error: "JSON inválido no corpo da requisição." }), { status: 400 });
     }
 
     const { rows } = payload;
