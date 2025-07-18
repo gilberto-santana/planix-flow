@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 
 export interface ParseUploadedSheetParams {
@@ -32,7 +31,7 @@ export async function callParseUploadedSheetFunction(
 
   try {
     const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
-      body: payload
+      body: JSON.stringify(payload) // CORRIGIDO AQUI
     });
 
     if (error) {
