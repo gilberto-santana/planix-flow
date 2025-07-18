@@ -13,17 +13,21 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    let payload = {};
+    let payload: any;
     try {
+      if (!req.body) {
+        return new Response(JSON.stringify({ error: "Requisição sem corpo." }), { status: 400 });
+      }
       payload = await req.json();
     } catch (error) {
       console.error("Erro ao ler JSON:", error);
       return new Response(JSON.stringify({ error: "Body inválido ou ausente no JSON." }), { status: 400 });
     }
 
-    const { rows } = payload as { rows: any[] };
+    const { rows } = payload;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
-      return new Response(JSON.stringify({ error: "Nenhum dado recebido." }), { status: 400 });
+      console.error("Nenhum dado 'rows' recebido:", rows);
+      return new Response(JSON.stringify({ error: "Nenhum dado recebido para gerar gráficos." }), { status: 400 });
     }
 
     const prompt = `
@@ -47,20 +51,23 @@ DADOS:
 ${JSON.stringify(rows)}
 `;
 
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: prompt }],
-            role: "user",
-          },
-        ],
-      }),
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+              role: "user",
+            },
+          ],
+        }),
+      }
+    );
 
     const result = await response.json();
     const text = result?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
