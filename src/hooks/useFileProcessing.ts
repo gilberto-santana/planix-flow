@@ -33,7 +33,7 @@ export function useFileProcessing() {
 
     setLoading(true);
     setCharts([]);
-    
+
     try {
       console.log("🚀 Iniciando processamento do arquivo:", file.name);
 
@@ -47,7 +47,7 @@ export function useFileProcessing() {
       };
 
       const parseResult = await callParseUploadedSheetFunction(parseParams);
-      
+
       if (parseResult.error || !parseResult.data?.success) {
         console.error("❌ Erro no processamento:", parseResult.error);
         toast({ 
@@ -122,6 +122,7 @@ export function useFileProcessing() {
       console.log("🧪 Dados enviados para IA:", JSON.stringify({ rows }));
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows })
       });
 
