@@ -113,7 +113,7 @@ export function useFileProcessing() {
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }) // CORRIGIDO AQUI
+        body: JSON.stringify({ data: rows }) // CORRIGIDO AQUI
       });
 
       if (aiResult.error) {
@@ -126,7 +126,7 @@ export function useFileProcessing() {
         return;
       }
 
-      if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
+      if (!aiResult.data?.chartConfig || aiResult.data.chartConfig.length === 0) {
         toast({ 
           title: "Nenhum gráfico gerado", 
           description: "A IA não conseguiu gerar gráficos para esta planilha." 
@@ -136,10 +136,10 @@ export function useFileProcessing() {
         return;
       }
 
-      setCharts(aiResult.data.charts);
+      setCharts(aiResult.data.chartConfig);
       toast({ 
         title: "Gráficos gerados com sucesso!", 
-        description: `${aiResult.data.charts.length} gráfico(s) criado(s).` 
+        description: `${aiResult.data.chartConfig.length} gráfico(s) criado(s).` 
       });
 
     } catch (err) {
