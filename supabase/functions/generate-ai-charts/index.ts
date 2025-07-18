@@ -39,13 +39,15 @@ Retorne apenas JSON no formato:
   {
     "title": "Título do gráfico",
     "type": "bar" | "line" | "pie",
-    "x": [array de categorias ou datas],
-    "y": [array de valores],
-    "xLabel": "Eixo X",
-    "yLabel": "Eixo Y"
+    "data": [
+      {"label": "categoria1", "value": 100},
+      {"label": "categoria2", "value": 200}
+    ]
   },
   ...
 ]
+
+IMPORTANTE: Use exatamente essa estrutura com "data" contendo array de objetos com "label" e "value".
 
 DADOS:
 ${JSON.stringify(rows)}

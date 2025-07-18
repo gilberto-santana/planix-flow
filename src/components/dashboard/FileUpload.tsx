@@ -52,7 +52,7 @@ const FileUpload = () => {
       return;
     }
 
-    await handleFileUpload(file, fileId, fileUrl);
+    await handleFileUpload(file, fileId, filePath);
     setUploading(false);
   };
 

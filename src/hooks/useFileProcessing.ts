@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
-import { ChartData } from "@/types/chart";
+import { ChartData } from "@/utils/chartGeneration";
 import { callParseUploadedSheetFunction } from "@/utils/edgeFunctionUtils";
 
 interface DatabaseRow {
@@ -26,23 +26,69 @@ export function useFileProcessing() {
   const [fileName, setFileName] = useState<string | null>(null);
 
   const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+    if (!user?.id) {
+      toast({ title: "Usuário não autenticado", variant: "destructive" });
+      return;
+    }
+
     setLoading(true);
     setCharts([]);
     try {
-      const parseResult = await callParseUploadedSheetFunction(file, filePath);
-      if (!parseResult || !parseResult.success || !parseResult.spreadsheetId) {
+      const parseParams = {
+        fileId,
+        userId: user.id,
+        filePath,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      };
+
+      const parseResult = await callParseUploadedSheetFunction(parseParams);
+      if (!parseResult?.data?.success) {
         toast({ title: "Erro ao processar planilha", variant: "destructive" });
         setLoading(false);
         return;
       }
 
-      const { spreadsheetId } = parseResult;
+      // Get the spreadsheet ID from the database after the file was processed
+      const { data: spreadsheets, error: spreadsheetError } = await supabase
+        .from("spreadsheets")
+        .select("id")
+        .eq("file_name", file.name)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (spreadsheetError || !spreadsheets?.length) {
+        console.error("Erro ao buscar spreadsheet:", spreadsheetError);
+        toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const spreadsheetId = spreadsheets[0].id;
       setFileName(file.name);
+
+      // Get spreadsheet data for AI chart generation
+      const { data: sheetData, error: sheetError } = await supabase
+        .from("sheets")
+        .select("id")
+        .eq("spreadsheet_id", spreadsheetId)
+        .limit(1);
+
+      if (sheetError || !sheetData?.length) {
+        console.error("Erro ao buscar sheet:", sheetError);
+        toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const sheetId = sheetData[0].id;
 
       const { data, error } = await supabase
         .from("spreadsheet_data")
         .select("*")
-        .eq("sheet_id", spreadsheetId);
+        .eq("sheet_id", sheetId);
 
       if (error || !data || data.length === 0) {
         toast({ title: "Nenhum dado encontrado após o upload.", variant: "destructive" });
@@ -60,18 +106,28 @@ export function useFileProcessing() {
       console.log("Enviando rows para IA:", rows); // Debug
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: { rows }, // Enviar como objeto, não como string
+        body: { rows }
       });
 
       console.log("Resultado IA:", aiResult); // Debug
 
-      if (aiResult.error || !aiResult.data?.charts) {
+      if (aiResult.error) {
+        console.error("Erro na função de IA:", aiResult.error);
         toast({ title: "Erro ao gerar gráficos com IA", variant: "destructive" });
         setLoading(false);
         return;
       }
 
+      if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
+        console.log("Nenhum gráfico foi gerado pela IA");
+        toast({ title: "Nenhum gráfico gerado", description: "A IA não conseguiu gerar gráficos para esta planilha." });
+        setCharts([]);
+        setLoading(false);
+        return;
+      }
+
       setCharts(aiResult.data.charts);
+      toast({ title: "Gráficos gerados com sucesso!", description: `${aiResult.data.charts.length} gráfico(s) criado(s).` });
     } catch (err) {
       console.error("Erro no upload:", err);
       toast({ title: "Erro inesperado no upload", variant: "destructive" });

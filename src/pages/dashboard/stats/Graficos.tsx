@@ -80,7 +80,7 @@ const Graficos = () => {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 {chart.type === "bar" ? (
-                  <BarChart data={chart.labels.map((label, i) => ({ label, value: chart.data[i] }))}>
+                  <BarChart data={chart.data.map(item => ({ label: item.label, value: item.value }))}>
                     <XAxis dataKey="label" />
                     <YAxis />
                     <Tooltip />
@@ -88,8 +88,8 @@ const Graficos = () => {
                   </BarChart>
                 ) : chart.type === "pie" ? (
                   <PieChart>
-                    <Pie data={chart.labels.map((label, i) => ({ name: label, value: chart.data[i] }))} dataKey="value" label>
-                      {chart.labels.map((_, i) => (
+                    <Pie data={chart.data.map(item => ({ name: item.label, value: item.value }))} dataKey="value" label>
+                      {chart.data.map((_, i) => (
                         <Cell key={i} />
                       ))}
                     </Pie>

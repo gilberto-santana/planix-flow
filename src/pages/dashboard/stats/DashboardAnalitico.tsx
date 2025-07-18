@@ -6,13 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ChartRenderer from "@/components/panel/ChartRenderer";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-
-interface ChartData {
-  title: string;
-  type: string;
-  x: string[];
-  y: number[];
-}
+import { ChartData } from "@/utils/chartGeneration";
 
 interface SpreadsheetRow {
   sheet_id: string;
@@ -89,8 +83,7 @@ const DashboardAnalitico = () => {
               detected.push({
                 title: `${xKey} vs ${yKey}`,
                 type: "bar",
-                x: xValues,
-                y: yValues,
+                data: xValues.map((label, i) => ({ label, value: yValues[i] }))
               });
               insights.push(
                 `Verifique se há correlação entre "${xKey}" e "${yKey}" — os dados sugerem uma possível relação.`

@@ -35,11 +35,11 @@ const ChartRenderer = ({ chart }: Props) => {
   const chartConfig = {
     type: chart.type,
     data: {
-      labels: chart.labels,
+      labels: chart.data.map(item => item.label),
       datasets: [
         {
           label: chart.title,
-          data: chart.data,
+          data: chart.data.map(item => item.value),
           backgroundColor: "rgba(99, 102, 241, 0.6)",
           borderColor: "rgba(99, 102, 241, 1)",
           borderWidth: 1,

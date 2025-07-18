@@ -11,9 +11,9 @@ export const Chart = ({ data }: ChartProps) => {
   const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#00C49F', '#FFBB28', '#FF8042'];
 
   // Transform chart data for recharts
-  const chartData = data.labels.map((label, i) => ({
-    name: label,
-    value: data.data[i]
+  const chartData = data.data.map(item => ({
+    name: item.label,
+    value: item.value
   }));
 
   return (

@@ -29,27 +29,65 @@ const PlanilhaDetalhada = () => {
     if (!spreadsheetId) return;
     setLoading(true);
     try {
+      // Get spreadsheet data for AI chart generation
+      const { data: sheetData, error: sheetError } = await supabase
+        .from("sheets")
+        .select("id")
+        .eq("spreadsheet_id", spreadsheetId)
+        .limit(1);
+
+      if (sheetError || !sheetData?.length) {
+        console.error("Erro ao buscar sheet:", sheetError);
+        toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const sheetId = sheetData[0].id;
+
       const { data, error } = await supabase
         .from("spreadsheet_data")
         .select("*")
-        .eq("spreadsheet_id", spreadsheetId);
+        .eq("sheet_id", sheetId);
 
       if (error) throw error;
 
-      const response = await fetch("/api/chart-generator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: data })
+      if (!data || data.length === 0) {
+        toast({ title: "Nenhum dado encontrado", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      const rows = data.map((row: any) => ({
+        row_index: row.row_index,
+        column_index: row.column_index,
+        column_name: row.column_name,
+        value: row.cell_value,
+      }));
+
+      const aiResult = await supabase.functions.invoke("generate-ai-charts", {
+        body: { rows }
       });
 
-      const result = await response.json();
-      setCharts(result);
+      if (aiResult.error) {
+        console.error("Erro na função de IA:", aiResult.error);
+        toast({ title: "Erro ao gerar gráficos com IA", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
 
-      const insights = result
-        .filter((c: any) => c.summary && c.summary.length > 0)
-        .map((c: any) => `\u2022 ${c.summary}`);
+      if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
+        console.log("Nenhum gráfico foi gerado pela IA");
+        toast({ title: "Nenhum gráfico gerado", description: "A IA não conseguiu gerar gráficos para esta planilha." });
+        setCharts([]);
+        setLoading(false);
+        return;
+      }
 
-      setDiagnostics(insights);
+      setCharts(aiResult.data.charts);
+
+      // No insights for now, just clear diagnostics
+      setDiagnostics([]);
     } catch (err) {
       console.error(err);
       toast({ title: "Erro", description: "Erro ao buscar dados para gráficos." });

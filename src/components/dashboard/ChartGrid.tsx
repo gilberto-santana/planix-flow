@@ -25,9 +25,9 @@ export const ChartGrid = ({ charts }: ChartGridProps) => {
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
       {charts.map((chart, index) => {
         // Transform chart data for recharts
-        const chartData = chart.labels.map((label, i) => ({
-          name: label,
-          value: chart.data[i]
+        const chartData = chart.data.map(item => ({
+          name: item.label,
+          value: item.value
         }));
 
         return (
