@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
-import { useNavigate } from "react-router-dom";
-import { ChartData } from "@/utils/chartGeneration";
+import { ChartData } from "@/types/chart";
+import { callParseUploadedSheetFunction } from "@/utils/edgeFunctionUtils";
 
 interface DatabaseRow {
   row_index: number;
@@ -21,78 +21,56 @@ interface DatabaseRow {
 export function useFileProcessing() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [charts, setCharts] = useState<ChartData[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File, fileId: string, fileUrl: string) => {
-    if (!user) return;
-
+  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
     setLoading(true);
-    setFileName(file.name);
-
-    const { name, size, type } = file;
-    const filePath = `${fileId}.${name.split(".").pop()}`;
-
+    setCharts([]);
     try {
-      const { data: parseResult } = await supabase.functions.invoke("parse-uploaded-sheet", {
-        body: JSON.stringify({
-          fileId,
-          userId: user.id,
-          fileUrl,
-          filePath,
-          fileName: name,
-          fileSize: size,
-          fileType: type,
-        }),
-      });
-
-      let spreadsheetId = parseResult?.spreadsheetId;
-
-      if (!spreadsheetId) {
-        const { data: spreadsheets } = await supabase
-          .from("spreadsheets")
-          .select("id")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (!spreadsheets?.length) {
-          toast({ title: "Erro", description: "ID da planilha não encontrado." });
-          setLoading(false);
-          return;
-        }
-
-        spreadsheetId = spreadsheets[0].id;
+      const parseResult = await callParseUploadedSheetFunction(file, filePath);
+      if (!parseResult || !parseResult.success || !parseResult.spreadsheetId) {
+        toast({ title: "Erro ao processar planilha", variant: "destructive" });
+        setLoading(false);
+        return;
       }
 
-      // ✅ Chamada Gemini para gerar gráficos AI
-      const { data: aiResult, error: aiError } = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify({ spreadsheetId }),
-      });
+      const { spreadsheetId } = parseResult;
+      setFileName(file.name);
 
-      if (aiError) {
-        console.error("Erro Gemini:", aiError);
-      } else {
-        setCharts(aiResult?.charts ?? []);
+      const { data, error } = await supabase
+        .from("spreadsheet_data")
+        .select("*")
+        .eq("sheet_id", spreadsheetId);
+
+      if (error || !data || data.length === 0) {
+        toast({ title: "Nenhum dado encontrado após o upload.", variant: "destructive" });
+        setLoading(false);
+        return;
       }
 
-      // ✅ Atualiza status da planilha
-      await supabase
-        .from("spreadsheets")
-        .update({ status: "processed" })
-        .eq("id", spreadsheetId);
+      const rows = data.map((row: DatabaseRow) => ({
+        row_index: row.row_index,
+        column_index: row.column_index,
+        column_name: row.column_name,
+        value: row.cell_value,
+      }));
 
-      toast({
-        title: "Planilha processada com sucesso!",
-        description: `Os dados foram analisados.`,
+      const aiResult = await supabase.functions.invoke("generate-ai-charts", {
+        body: JSON.stringify({ rows }),
       });
 
-      navigate(`/dashboard/stats?type=sheet&id=${spreadsheetId}`);
+      if (aiResult.error || !aiResult.data?.charts) {
+        toast({ title: "Erro ao gerar gráficos com IA", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      setCharts(aiResult.data.charts);
     } catch (err) {
-      console.error("Erro ao processar:", err);
-      toast({ title: "Erro", description: "Falha ao processar a planilha." });
+      console.error("Erro no upload:", err);
+      toast({ title: "Erro inesperado no upload", variant: "destructive" });
     } finally {
       setLoading(false);
     }
