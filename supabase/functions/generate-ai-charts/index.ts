@@ -1,5 +1,3 @@
-// supabase/functions/generate-ai-charts/index.ts
-
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
 
@@ -13,24 +11,28 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    let payload: any;
-
-    // Verifica se o Content-Type é application/json
-    const contentType = req.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      return new Response(JSON.stringify({ error: "Content-Type inválido. Esperado application/json." }), { status: 400 });
+    if (!req.body) {
+      console.error("❌ Corpo da requisição vazio.");
+      return new Response(JSON.stringify({ error: "Requisição sem corpo." }), { status: 400 });
     }
 
+    let payload: any;
     try {
-      payload = await req.json();
+      const bodyText = await req.text();
+      if (!bodyText || bodyText.trim() === "") {
+        console.error("❌ Body vazio.");
+        return new Response(JSON.stringify({ error: "Body vazio." }), { status: 400 });
+      }
+
+      payload = JSON.parse(bodyText);
     } catch (error) {
-      console.error("Erro ao parsear JSON:", error);
+      console.error("❌ Erro ao parsear JSON:", error);
       return new Response(JSON.stringify({ error: "JSON inválido no corpo da requisição." }), { status: 400 });
     }
 
     const { rows } = payload;
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
-      console.error("Nenhum dado 'rows' recebido:", rows);
+      console.error("❌ Nenhum dado 'rows' válido:", rows);
       return new Response(JSON.stringify({ error: "Nenhum dado recebido para gerar gráficos." }), { status: 400 });
     }
 
@@ -47,8 +49,7 @@ Retorne apenas JSON no formato:
       {"label": "categoria1", "value": 100},
       {"label": "categoria2", "value": 200}
     ]
-  },
-  ...
+  }
 ]
 
 IMPORTANTE: Use exatamente essa estrutura com "data" contendo array de objetos com "label" e "value".
@@ -61,9 +62,7 @@ ${JSON.stringify(rows)}
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [
             {
@@ -85,6 +84,7 @@ ${JSON.stringify(rows)}
     try {
       charts = JSON.parse(jsonString);
     } catch (e) {
+      console.error("❌ Erro ao parsear JSON da IA:", jsonString);
       return new Response(JSON.stringify({ error: "Falha ao parsear o JSON retornado pela IA." }), { status: 500 });
     }
 
@@ -93,7 +93,7 @@ ${JSON.stringify(rows)}
       status: 200,
     });
   } catch (err) {
-    console.error("Erro geral:", err);
+    console.error("❌ Erro interno:", err);
     return new Response(JSON.stringify({ error: "Erro interno." }), { status: 500 });
   }
 });
