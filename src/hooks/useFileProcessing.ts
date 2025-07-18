@@ -41,16 +41,16 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
       if (parseResult.error || !parseResult.data?.success) {
-        toast({ 
-          title: "Erro ao processar planilha", 
+        toast({
+          title: "Erro ao processar planilha",
           description: parseResult.error || "Falha no processamento",
-          variant: "destructive" 
+          variant: "destructive",
         });
         setLoading(false);
         return;
@@ -113,25 +113,26 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("Enviando rows para IA:", rows); // debug opcional
+
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows })
+        body: { rows }, // ENVIO DIRETO COMO OBJETO
       });
 
       if (aiResult.error) {
-        toast({ 
-          title: "Erro ao gerar gráficos com IA", 
+        toast({
+          title: "Erro ao gerar gráficos com IA",
           description: aiResult.error.message,
-          variant: "destructive" 
+          variant: "destructive",
         });
         setLoading(false);
         return;
       }
 
       if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
-        toast({ 
-          title: "Nenhum gráfico gerado", 
-          description: "A IA não conseguiu gerar gráficos para esta planilha." 
+        toast({
+          title: "Nenhum gráfico gerado",
+          description: "A IA não conseguiu gerar gráficos para esta planilha.",
         });
         setCharts([]);
         setLoading(false);
@@ -139,16 +140,15 @@ export function useFileProcessing() {
       }
 
       setCharts(aiResult.data.charts);
-      toast({ 
-        title: "Gráficos gerados com sucesso!", 
-        description: `${aiResult.data.charts.length} gráfico(s) criado(s).` 
+      toast({
+        title: "Gráficos gerados com sucesso!",
+        description: `${aiResult.data.charts.length} gráfico(s) criado(s).`,
       });
-
     } catch (err) {
-      toast({ 
-        title: "Erro inesperado no upload", 
+      toast({
+        title: "Erro inesperado no upload",
         description: err instanceof Error ? err.message : "Erro desconhecido",
-        variant: "destructive" 
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
