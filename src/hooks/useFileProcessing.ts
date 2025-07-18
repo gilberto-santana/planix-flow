@@ -35,8 +35,6 @@ export function useFileProcessing() {
     setCharts([]);
 
     try {
-      console.log("🚀 Iniciando processamento do arquivo:", file.name);
-
       const parseParams = {
         fileId,
         userId: user.id,
@@ -49,7 +47,6 @@ export function useFileProcessing() {
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
       if (parseResult.error || !parseResult.data?.success) {
-        console.error("❌ Erro no processamento:", parseResult.error);
         toast({ 
           title: "Erro ao processar planilha", 
           description: parseResult.error || "Falha no processamento",
@@ -59,9 +56,7 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ Planilha processada com sucesso");
       setFileName(file.name);
-
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       const { data: spreadsheets, error: spreadsheetError } = await supabase
@@ -73,14 +68,12 @@ export function useFileProcessing() {
         .limit(1);
 
       if (spreadsheetError || !spreadsheets?.length) {
-        console.error("❌ Erro ao buscar spreadsheet:", spreadsheetError);
         toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const spreadsheetId = spreadsheets[0].id;
-      console.log("📄 Spreadsheet ID:", spreadsheetId);
 
       const { data: sheetData, error: sheetError } = await supabase
         .from("sheets")
@@ -89,14 +82,12 @@ export function useFileProcessing() {
         .limit(1);
 
       if (sheetError || !sheetData?.length) {
-        console.error("❌ Erro ao buscar sheet:", sheetError);
         toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const sheetId = sheetData[0].id;
-      console.log("📄 Sheet ID:", sheetId);
 
       const { data, error } = await supabase
         .from("spreadsheet_data")
@@ -104,13 +95,10 @@ export function useFileProcessing() {
         .eq("sheet_id", sheetId);
 
       if (error || !data || data.length === 0) {
-        console.error("❌ Nenhum dado encontrado:", error);
         toast({ title: "Nenhum dado encontrado após o upload.", variant: "destructive" });
         setLoading(false);
         return;
       }
-
-      console.log("📊 Dados encontrados para IA:", data.length, "registros");
 
       const rows = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
@@ -119,17 +107,18 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
-      console.log("🧪 Dados enviados para IA:", JSON.stringify({ rows }));
+      if (!rows || rows.length === 0) {
+        toast({ title: "Nenhum dado válido para enviar à IA", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows })
       });
 
-      console.log("🤖 Resultado da IA:", aiResult);
-
       if (aiResult.error) {
-        console.error("❌ Erro na função de IA:", aiResult.error);
         toast({ 
           title: "Erro ao gerar gráficos com IA", 
           description: aiResult.error.message,
@@ -140,7 +129,6 @@ export function useFileProcessing() {
       }
 
       if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
-        console.log("⚠️ Nenhum gráfico foi gerado pela IA");
         toast({ 
           title: "Nenhum gráfico gerado", 
           description: "A IA não conseguiu gerar gráficos para esta planilha." 
@@ -150,7 +138,6 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ Gráficos gerados:", aiResult.data.charts.length);
       setCharts(aiResult.data.charts);
       toast({ 
         title: "Gráficos gerados com sucesso!", 
@@ -158,7 +145,6 @@ export function useFileProcessing() {
       });
 
     } catch (err) {
-      console.error("❌ Erro inesperado no upload:", err);
       toast({ 
         title: "Erro inesperado no upload", 
         description: err instanceof Error ? err.message : "Erro desconhecido",
