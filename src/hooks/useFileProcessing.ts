@@ -1,3 +1,4 @@
+// src/hooks/useFileProcessing.ts
 
 import { useState } from "react";
 import { useAuth } from "./useAuth";
@@ -126,7 +127,7 @@ export function useFileProcessing() {
 
       // Call AI chart generation
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: { rows }
+        body: JSON.stringify({ rows }) // <- CORREÇÃO AQUI
       });
 
       console.log("🤖 Resultado da IA:", aiResult);
