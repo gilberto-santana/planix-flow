@@ -1,4 +1,3 @@
-// src/hooks/useFileProcessing.ts
 
 import { useState } from "react";
 import { useAuth } from "./useAuth";
@@ -33,7 +32,10 @@ export function useFileProcessing() {
 
     setLoading(true);
     setCharts([]);
+    
     try {
+      console.log("🚀 Iniciando processamento do arquivo:", file.name);
+
       const parseParams = {
         fileId,
         userId: user.id,
@@ -43,14 +45,27 @@ export function useFileProcessing() {
         fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       };
 
+      // Call the parse-uploaded-sheet function
       const parseResult = await callParseUploadedSheetFunction(parseParams);
-      if (!parseResult?.data?.success) {
-        toast({ title: "Erro ao processar planilha", variant: "destructive" });
+      
+      if (parseResult.error || !parseResult.data?.success) {
+        console.error("❌ Erro no processamento:", parseResult.error);
+        toast({ 
+          title: "Erro ao processar planilha", 
+          description: parseResult.error || "Falha no processamento",
+          variant: "destructive" 
+        });
         setLoading(false);
         return;
       }
 
-      // Get the spreadsheet ID from the database after the file was processed
+      console.log("✅ Planilha processada com sucesso");
+      setFileName(file.name);
+
+      // Wait a moment for data to be inserted
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Get the spreadsheet data for AI chart generation
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
@@ -60,16 +75,15 @@ export function useFileProcessing() {
         .limit(1);
 
       if (spreadsheetError || !spreadsheets?.length) {
-        console.error("Erro ao buscar spreadsheet:", spreadsheetError);
+        console.error("❌ Erro ao buscar spreadsheet:", spreadsheetError);
         toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const spreadsheetId = spreadsheets[0].id;
-      setFileName(file.name);
 
-      // Get spreadsheet data for AI chart generation
+      // Get sheet data
       const { data: sheetData, error: sheetError } = await supabase
         .from("sheets")
         .select("id")
@@ -77,7 +91,7 @@ export function useFileProcessing() {
         .limit(1);
 
       if (sheetError || !sheetData?.length) {
-        console.error("Erro ao buscar sheet:", sheetError);
+        console.error("❌ Erro ao buscar sheet:", sheetError);
         toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
         setLoading(false);
         return;
@@ -85,17 +99,22 @@ export function useFileProcessing() {
 
       const sheetId = sheetData[0].id;
 
+      // Get spreadsheet data for AI
       const { data, error } = await supabase
         .from("spreadsheet_data")
         .select("*")
         .eq("sheet_id", sheetId);
 
       if (error || !data || data.length === 0) {
+        console.error("❌ Nenhum dado encontrado:", error);
         toast({ title: "Nenhum dado encontrado após o upload.", variant: "destructive" });
         setLoading(false);
         return;
       }
 
+      console.log("📊 Dados encontrados para IA:", data.length, "registros");
+
+      // Transform data for AI
       const rows = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
         column_index: row.column_index,
@@ -103,34 +122,51 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
-      console.log("Enviando rows para IA:", rows); // Debug
+      console.log("🤖 Enviando dados para IA...");
 
+      // Call AI chart generation
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: { rows }
       });
 
-      console.log("Resultado IA:", aiResult); // Debug
+      console.log("🤖 Resultado da IA:", aiResult);
 
       if (aiResult.error) {
-        console.error("Erro na função de IA:", aiResult.error);
-        toast({ title: "Erro ao gerar gráficos com IA", variant: "destructive" });
+        console.error("❌ Erro na função de IA:", aiResult.error);
+        toast({ 
+          title: "Erro ao gerar gráficos com IA", 
+          description: aiResult.error.message,
+          variant: "destructive" 
+        });
         setLoading(false);
         return;
       }
 
       if (!aiResult.data?.charts || aiResult.data.charts.length === 0) {
-        console.log("Nenhum gráfico foi gerado pela IA");
-        toast({ title: "Nenhum gráfico gerado", description: "A IA não conseguiu gerar gráficos para esta planilha." });
+        console.log("⚠️ Nenhum gráfico foi gerado pela IA");
+        toast({ 
+          title: "Nenhum gráfico gerado", 
+          description: "A IA não conseguiu gerar gráficos para esta planilha." 
+        });
         setCharts([]);
         setLoading(false);
         return;
       }
 
+      console.log("✅ Gráficos gerados:", aiResult.data.charts.length);
       setCharts(aiResult.data.charts);
-      toast({ title: "Gráficos gerados com sucesso!", description: `${aiResult.data.charts.length} gráfico(s) criado(s).` });
+      toast({ 
+        title: "Gráficos gerados com sucesso!", 
+        description: `${aiResult.data.charts.length} gráfico(s) criado(s).` 
+      });
+
     } catch (err) {
-      console.error("Erro no upload:", err);
-      toast({ title: "Erro inesperado no upload", variant: "destructive" });
+      console.error("❌ Erro inesperado no upload:", err);
+      toast({ 
+        title: "Erro inesperado no upload", 
+        description: err instanceof Error ? err.message : "Erro desconhecido",
+        variant: "destructive" 
+      });
     } finally {
       setLoading(false);
     }

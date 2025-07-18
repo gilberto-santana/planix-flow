@@ -1,4 +1,3 @@
-// src/components/panel/FileUpload.tsx
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,8 +16,11 @@ const FileUpload = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    console.log("📁 Arquivo selecionado:", file.name, file.size, "bytes");
+
     const { valid, error } = validateFile(file);
     if (!valid) {
+      console.error("❌ Arquivo inválido:", error);
       toast({ title: "Arquivo inválido", description: error });
       return;
     }
@@ -27,33 +29,37 @@ const FileUpload = () => {
     const fileId = crypto.randomUUID();
     const filePath = `${fileId}.${fileExt}`;
 
+    console.log("📤 Iniciando upload para:", filePath);
     setUploading(true);
 
-    const { error: uploadError } = await supabase.storage
-      .from("spreadsheets")
-      .upload(filePath, file, {
-        contentType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        upsert: true,
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from("spreadsheets")
+        .upload(filePath, file, {
+          contentType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error("❌ Erro no upload:", uploadError.message);
+        toast({ title: "Erro ao enviar arquivo", description: uploadError.message });
+        setUploading(false);
+        return;
+      }
+
+      console.log("✅ Upload concluído, iniciando processamento...");
+
+      // Start processing the uploaded file
+      await handleFileUpload(file, fileId, filePath);
+    } catch (error) {
+      console.error("❌ Erro inesperado no upload:", error);
+      toast({ 
+        title: "Erro inesperado", 
+        description: error instanceof Error ? error.message : "Erro desconhecido"
       });
-
-    if (uploadError) {
-      console.error("Erro ao fazer upload:", uploadError.message);
-      toast({ title: "Erro ao enviar arquivo", description: uploadError.message });
+    } finally {
       setUploading(false);
-      return;
     }
-
-    const { data } = supabase.storage.from("spreadsheets").getPublicUrl(filePath);
-    const fileUrl = data?.publicUrl;
-
-    if (!fileUrl) {
-      toast({ title: "Erro ao obter URL do arquivo" });
-      setUploading(false);
-      return;
-    }
-
-    await handleFileUpload(file, fileId, filePath);
-    setUploading(false);
   };
 
   return (
@@ -61,7 +67,7 @@ const FileUpload = () => {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".xlsx, .xls"
+        accept=".xlsx, .xls, .csv"
         className="hidden"
         onChange={handleFileChange}
       />
@@ -70,7 +76,7 @@ const FileUpload = () => {
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading || loading}
       >
-        {uploading || loading ? "Processando..." : "Selecionar Planilha"}
+        {uploading ? "Enviando..." : loading ? "Processando..." : "Selecionar Planilha"}
       </Button>
 
       {fileName && <span className="text-sm text-muted-foreground">📄 {fileName}</span>}

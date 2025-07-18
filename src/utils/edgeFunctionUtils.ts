@@ -1,28 +1,5 @@
 
-export async function invokeEdgeFunction<T>(
-  functionName: string,
-  payload: Record<string, any>
-): Promise<{ data: T | null; error: string | null }> {
-  try {
-    const response = await fetch(`/functions/v1/${functionName}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { data: null, error: `Erro ${response.status}: ${errorText}` };
-    }
-
-    const data = await response.json();
-    return { data, error: null };
-  } catch (err: any) {
-    return { data: null, error: err.message || "Erro desconhecido" };
-  }
-}
+import { supabase } from "@/integrations/supabase/client";
 
 export interface ParseUploadedSheetParams {
   fileId: string;
@@ -53,16 +30,20 @@ export async function callParseUploadedSheetFunction(
 
   console.log("📦 Payload para Edge Function:", payload);
 
-  const result = await invokeEdgeFunction<ParseUploadedSheetResult>(
-    "parse-uploaded-sheet",
-    payload
-  );
+  try {
+    const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
+      body: payload
+    });
 
-  if (result.error) {
-    console.error("❌ Erro na Edge Function:", result.error);
-    return { data: null, error: result.error };
+    if (error) {
+      console.error("❌ Erro na Edge Function:", error);
+      return { data: null, error: error.message };
+    }
+
+    console.log("✅ Edge Function executada com sucesso:", data);
+    return { data, error: null };
+  } catch (err: any) {
+    console.error("❌ Erro inesperado:", err);
+    return { data: null, error: err.message || "Erro desconhecido" };
   }
-
-  console.log("✅ Edge Function executada com sucesso:", result.data);
-  return result;
 }
