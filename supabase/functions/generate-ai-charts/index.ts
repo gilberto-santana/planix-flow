@@ -9,11 +9,26 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const body = await req.json()
-    const { data: sheetData } = body
+    const contentType = req.headers.get("content-type") || ""
+    if (!contentType.includes("application/json")) {
+      throw new Error("Requisição inválida: Content-Type não é application/json")
+    }
 
-    if (!sheetData) {
-      throw new Error("Dados da planilha ('sheetData') não encontrados no corpo da requisição.")
+    const bodyText = await req.text()
+    if (!bodyText) {
+      throw new Error("Corpo da requisição vazio.")
+    }
+
+    let body
+    try {
+      body = JSON.parse(bodyText)
+    } catch (e) {
+      throw new Error("JSON malformado recebido na requisição.")
+    }
+
+    const { data: sheetData } = body
+    if (!sheetData || !Array.isArray(sheetData) || sheetData.length === 0) {
+      throw new Error("Dados da planilha ('data') não encontrados ou vazios.")
     }
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
@@ -33,7 +48,7 @@ Deno.serve(async (req) => {
       status: 200
     })
   } catch (error) {
-    console.error(error)
+    console.error("❌ Erro na função generate-ai-charts:", error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500
