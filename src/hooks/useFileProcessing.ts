@@ -57,9 +57,13 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
+      console.log("Enviando rows para IA:", rows); // Debug
+
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify({ rows }),
+        body: { rows }, // Enviar como objeto, não como string
       });
+
+      console.log("Resultado IA:", aiResult); // Debug
 
       if (aiResult.error || !aiResult.data?.charts) {
         toast({ title: "Erro ao gerar gráficos com IA", variant: "destructive" });
