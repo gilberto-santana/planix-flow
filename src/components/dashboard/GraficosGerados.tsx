@@ -1,6 +1,4 @@
 
-// src/components/dashboard/GraficosGerados.tsx
-
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useCharts } from "@/contexts/ChartsContext";
@@ -14,29 +12,43 @@ const GraficosGerados = () => {
   const { charts, fileName } = useCharts();
   const chartsRef = useRef<HTMLDivElement>(null);
 
+  console.log("📊 GraficosGerados - Estado atual:", { 
+    chartsLength: charts.length, 
+    fileName,
+    firstChart: charts[0] 
+  });
+
   const handleBack = () => {
     navigate("/dashboard/stats?type=home");
   };
 
   const downloadAsImage = async () => {
     if (!chartsRef.current) return;
-    const canvas = await html2canvas(chartsRef.current);
-    const link = document.createElement("a");
-    link.download = "graficos.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
+    try {
+      const canvas = await html2canvas(chartsRef.current);
+      const link = document.createElement("a");
+      link.download = `graficos-${fileName || 'planilha'}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (error) {
+      console.error("Erro ao baixar imagem:", error);
+    }
   };
 
   const downloadAsPDF = async () => {
     if (!chartsRef.current) return;
-    const canvas = await html2canvas(chartsRef.current);
-    const imgData = canvas.toDataURL("image/png");
-    const pdf = new jsPDF();
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-    pdf.save("graficos.pdf");
+    try {
+      const canvas = await html2canvas(chartsRef.current);
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`graficos-${fileName || 'planilha'}.pdf`);
+    } catch (error) {
+      console.error("Erro ao baixar PDF:", error);
+    }
   };
 
   if (charts.length === 0) {
@@ -58,7 +70,7 @@ const GraficosGerados = () => {
           <p className="text-muted-foreground">
             Faça upload de uma planilha (.csv ou .xlsx) primeiro para gerar gráficos
           </p>
-          <Button onClick={() => navigate("/")}>
+          <Button onClick={() => navigate("/dashboard/stats?type=home")}>
             Fazer Upload de Planilha
           </Button>
         </div>
@@ -90,9 +102,12 @@ const GraficosGerados = () => {
       </div>
 
       <div ref={chartsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {charts.map((chart, i) => (
-          <ChartRenderer key={i} chart={chart} />
-        ))}
+        {charts.map((chart, i) => {
+          console.log(`📊 Renderizando gráfico ${i + 1}:`, chart);
+          return (
+            <ChartRenderer key={i} chart={chart} />
+          );
+        })}
       </div>
     </div>
   );

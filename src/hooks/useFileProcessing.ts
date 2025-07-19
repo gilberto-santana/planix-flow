@@ -17,6 +17,50 @@ interface DatabaseRow {
   data_type: string | null;
 }
 
+// Function to convert Chart.js format to our simple format
+const convertChartJsToSimpleFormat = (chartJsData: any) => {
+  console.log("🔄 Converting Chart.js data:", chartJsData);
+  
+  try {
+    if (!chartJsData || !Array.isArray(chartJsData)) {
+      console.error("❌ Invalid chartJsData structure:", chartJsData);
+      return [];
+    }
+
+    const convertedCharts = chartJsData.map((chart: any, index: number) => {
+      // Extract title from options or generate one
+      const title = chart.options?.plugins?.title?.text || 
+                   chart.data?.datasets?.[0]?.label || 
+                   `Gráfico ${index + 1}`;
+
+      // Convert Chart.js data structure to simple format
+      const labels = chart.data?.labels || [];
+      const dataset = chart.data?.datasets?.[0];
+      const values = dataset?.data || [];
+
+      // Create simple data array
+      const simpleData = labels.map((label: string, idx: number) => ({
+        label: label || `Item ${idx + 1}`,
+        value: values[idx] || 0
+      }));
+
+      console.log(`✅ Converted chart ${index + 1}:`, { title, type: chart.type, dataLength: simpleData.length });
+
+      return {
+        type: chart.type || 'bar',
+        title: title,
+        data: simpleData
+      };
+    });
+
+    console.log("✅ All charts converted successfully:", convertedCharts.length);
+    return convertedCharts;
+  } catch (error) {
+    console.error("❌ Error converting Chart.js data:", error);
+    return [];
+  }
+};
+
 export function useFileProcessing() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -117,7 +161,7 @@ export function useFileProcessing() {
         body: { data: rows }
       });
 
-      console.log("🤖 Resposta da IA:", aiResult);
+      console.log("🤖 Resposta completa da IA:", aiResult);
 
       if (aiResult.error) {
         console.error("❌ Erro da Edge Function:", aiResult.error);
@@ -140,11 +184,25 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ Gráficos gerados:", aiResult.data.chartConfig);
-      setCharts(aiResult.data.chartConfig);
+      console.log("📋 Dados brutos dos gráficos (Chart.js format):", aiResult.data.chartConfig);
+
+      // Convert Chart.js format to our simple format
+      const convertedCharts = convertChartJsToSimpleFormat(aiResult.data.chartConfig);
+
+      if (convertedCharts.length === 0) {
+        toast({ 
+          title: "Erro na conversão dos gráficos", 
+          description: "Não foi possível converter os gráficos para exibição." 
+        });
+        setLoading(false);
+        return;
+      }
+
+      console.log("✅ Gráficos convertidos para formato simples:", convertedCharts);
+      setCharts(convertedCharts);
       toast({ 
         title: "Gráficos gerados com sucesso!", 
-        description: `${aiResult.data.chartConfig.length} gráfico(s) criado(s).` 
+        description: `${convertedCharts.length} gráfico(s) criado(s).` 
       });
 
     } catch (err) {

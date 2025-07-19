@@ -1,6 +1,14 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { ChartData } from '@/utils/chartGeneration';
+
+export interface ChartData {
+  type: 'bar' | 'line' | 'pie';
+  title: string;
+  data: Array<{
+    label: string;
+    value: number;
+  }>;
+}
 
 interface ChartsContextType {
   charts: ChartData[];
