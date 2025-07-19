@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "./use-toast";
-import { ChartData } from "@/utils/chartGeneration";
+import { useCharts } from "@/contexts/ChartsContext";
 import { callParseUploadedSheetFunction } from "@/utils/edgeFunctionUtils";
 
 interface DatabaseRow {
@@ -21,8 +21,7 @@ export function useFileProcessing() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [charts, setCharts] = useState<ChartData[]>([]);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const { charts, fileName, setCharts, setFileName } = useCharts();
 
   const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
     if (!user?.id) {
@@ -114,8 +113,6 @@ export function useFileProcessing() {
 
       console.log("📊 Enviando dados para IA:", { totalRows: rows.length, sampleData: rows.slice(0, 3) });
 
-      // CORREÇÃO: Remover JSON.stringify() e headers manuais
-      // Deixar o Supabase gerenciar automaticamente a serialização
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: { data: rows }
       });

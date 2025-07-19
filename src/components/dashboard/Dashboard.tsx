@@ -3,7 +3,7 @@
 
 import { DashboardHeader } from "./DashboardHeader";
 import DashboardStats from "./DashboardStats";
-import FileUpload from "./FileUpload"; // corrigido: importação como default
+import FileUpload from "./FileUpload";
 import { ChartsSection } from "./ChartsSection";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 

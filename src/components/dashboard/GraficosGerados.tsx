@@ -1,42 +1,21 @@
+
 // src/components/dashboard/GraficosGerados.tsx
 
-import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
-import { ChartData } from "@/utils/chartGeneration";
+import { useCharts } from "@/contexts/ChartsContext";
 import ChartRenderer from "@/components/panel/ChartRenderer";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { useRef } from "react";
 
 const GraficosGerados = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [charts, setCharts] = useState<ChartData[]>([]);
+  const { charts, fileName } = useCharts();
   const chartsRef = useRef<HTMLDivElement>(null);
 
   const handleBack = () => {
     navigate("/dashboard/stats?type=home");
-  };
-
-  const fetchChartData = async () => {
-    try {
-      const { data, error } = await supabase.from("spreadsheet_data").select("*");
-      if (error) throw error;
-
-      const response = await fetch("/api/chart-generator", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows: data }),
-      });
-
-      const result = await response.json();
-      setCharts(result);
-    } catch (err) {
-      console.error(err);
-      toast({ title: "Erro", description: "Erro ao buscar dados para gráficos." });
-    }
   };
 
   const downloadAsImage = async () => {
@@ -60,9 +39,32 @@ const GraficosGerados = () => {
     pdf.save("graficos.pdf");
   };
 
-  useEffect(() => {
-    fetchChartData();
-  }, []);
+  if (charts.length === 0) {
+    return (
+      <div className="p-4 space-y-6">
+        <div className="flex justify-between items-center">
+          <Button onClick={handleBack}>← Voltar</Button>
+        </div>
+
+        <div className="text-center py-16 space-y-4">
+          <div className="w-24 h-24 mx-auto bg-muted rounded-full flex items-center justify-center">
+            <svg className="w-12 h-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-medium text-muted-foreground">
+            Nenhum gráfico gerado
+          </h3>
+          <p className="text-muted-foreground">
+            Faça upload de uma planilha (.csv ou .xlsx) primeiro para gerar gráficos
+          </p>
+          <Button onClick={() => navigate("/")}>
+            Fazer Upload de Planilha
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 space-y-6">
@@ -78,7 +80,14 @@ const GraficosGerados = () => {
         </div>
       </div>
 
-      <h2 className="text-xl font-bold">Gráficos Gerados</h2>
+      <div className="space-y-2">
+        <h2 className="text-xl font-bold">Gráficos Gerados</h2>
+        {fileName && (
+          <p className="text-muted-foreground">
+            Planilha: <span className="font-medium">{fileName}</span> • {charts.length} gráfico{charts.length !== 1 ? 's' : ''}
+          </p>
+        )}
+      </div>
 
       <div ref={chartsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {charts.map((chart, i) => (
