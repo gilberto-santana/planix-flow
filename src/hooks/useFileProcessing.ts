@@ -28,6 +28,8 @@ const convertChartJsToSimpleFormat = (chartJsData: any) => {
     }
 
     const convertedCharts = chartJsData.map((chart: any, index: number) => {
+      console.log(`🔍 Processing chart ${index + 1}:`, chart);
+
       // Extract title from options or generate one
       const title = chart.options?.plugins?.title?.text || 
                    chart.data?.datasets?.[0]?.label || 
@@ -38,20 +40,43 @@ const convertChartJsToSimpleFormat = (chartJsData: any) => {
       const dataset = chart.data?.datasets?.[0];
       const values = dataset?.data || [];
 
-      // Create simple data array
-      const simpleData = labels.map((label: string, idx: number) => ({
-        label: label || `Item ${idx + 1}`,
-        value: values[idx] || 0
-      }));
+      console.log(`📋 Chart ${index + 1} - Labels:`, labels);
+      console.log(`📋 Chart ${index + 1} - Values:`, values);
 
-      console.log(`✅ Converted chart ${index + 1}:`, { title, type: chart.type, dataLength: simpleData.length });
+      // Validate that we have both labels and values
+      if (!labels.length || !values.length) {
+        console.warn(`⚠️ Chart ${index + 1} missing labels or values:`, { labels, values });
+        return null;
+      }
+
+      // Create simple data array ensuring we have valid numeric values
+      const simpleData = labels.map((label: string, idx: number) => {
+        const value = Number(values[idx]);
+        return {
+          label: String(label || `Item ${idx + 1}`),
+          value: isNaN(value) ? 0 : value
+        };
+      }).filter(item => item.value > 0 || item.label); // Keep items with valid data
+
+      console.log(`✅ Converted chart ${index + 1}:`, { 
+        title, 
+        type: chart.type, 
+        dataLength: simpleData.length,
+        sampleData: simpleData.slice(0, 2)
+      });
+
+      // Only return chart if it has valid data
+      if (simpleData.length === 0) {
+        console.warn(`⚠️ Chart ${index + 1} has no valid data after conversion`);
+        return null;
+      }
 
       return {
         type: chart.type || 'bar',
         title: title,
         data: simpleData
       };
-    });
+    }).filter(Boolean); // Remove null charts
 
     console.log("✅ All charts converted successfully:", convertedCharts.length);
     return convertedCharts;

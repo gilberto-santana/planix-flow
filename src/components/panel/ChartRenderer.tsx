@@ -1,62 +1,90 @@
-import { useEffect, useState } from "react";
+
 import { Card, CardContent } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { ChartData } from "@/utils/chartGeneration";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
+import { ChartData } from "@/contexts/ChartsContext";
 
 interface Props {
   chart: ChartData;
 }
 
 const ChartRenderer = ({ chart }: Props) => {
-  const [insight, setInsight] = useState<string | null>(null);
+  console.log("📊 ChartRenderer - Dados recebidos:", chart);
 
-  useEffect(() => {
-    if (!chart?.data || chart.data.length < 2) return;
+  if (!chart || !chart.data || !Array.isArray(chart.data) || chart.data.length === 0) {
+    console.warn("⚠️ ChartRenderer - Dados inválidos:", chart);
+    return (
+      <Card className="p-4">
+        <CardContent>
+          <h3 className="font-semibold text-sm mb-2">{chart?.title || "Gráfico"}</h3>
+          <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+            Dados indisponíveis
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-    const values = chart.data.map((d) => Number(d.value)).filter((v) => !isNaN(v));
-    if (values.length === 0) return;
+  // Transform data for recharts format
+  const chartData = chart.data.map(item => ({
+    name: item.label,
+    value: Number(item.value) || 0
+  }));
 
-    const total = values.reduce((acc, v) => acc + v, 0);
-    const avg = total / values.length;
-    const max = Math.max(...values);
-    const min = Math.min(...values);
+  console.log("📈 ChartRenderer - Dados transformados:", chartData);
 
-    const first = values[0];
-    const last = values[values.length - 1];
-
-    const diff = last - first;
-    const percent = ((diff / first) * 100).toFixed(1);
-
-    let msg = "";
-
-    if (diff > 0) msg += `📈 Tendência de alta (${percent}% desde o início).\n`;
-    else if (diff < 0) msg += `📉 Tendência de queda (${percent}% desde o início).\n`;
-    else msg += "⏸️ Estável ao longo do tempo.\n";
-
-    msg += `🔢 Média: ${avg.toFixed(1)} | Máximo: ${max} | Mínimo: ${min}`;
-
-    setInsight(msg);
-  }, [chart]);
+  const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7f50', '#00C49F', '#FFBB28', '#FF8042'];
 
   return (
-    <Card className="p-2">
+    <Card className="p-4">
       <CardContent>
         <h3 className="font-semibold text-sm mb-2">{chart.title}</h3>
 
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chart.data}>
-            <XAxis dataKey="label" hide={chart.data.length > 30} />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="value" fill="#8884d8" />
-          </BarChart>
+          {chart.type === "bar" && (
+            <BarChart data={chartData}>
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                interval={chartData.length > 10 ? 'preserveStartEnd' : 0}
+              />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Bar dataKey="value" fill="#8884d8" />
+            </BarChart>
+          )}
+          
+          {chart.type === "line" && (
+            <LineChart data={chartData}>
+              <XAxis 
+                dataKey="name" 
+                tick={{ fontSize: 12 }}
+                interval={chartData.length > 10 ? 'preserveStartEnd' : 0}
+              />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke="#8884d8" strokeWidth={2} />
+            </LineChart>
+          )}
+          
+          {chart.type === "pie" && (
+            <PieChart>
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="name"
+                cx="50%"
+                cy="50%"
+                outerRadius={80}
+                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              >
+                {chartData.map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          )}
         </ResponsiveContainer>
-
-        {insight && (
-          <div className="mt-3 text-xs whitespace-pre-wrap bg-muted p-2 rounded">
-            {insight}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
