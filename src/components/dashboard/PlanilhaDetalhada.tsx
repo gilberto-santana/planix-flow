@@ -77,13 +77,13 @@ const PlanilhaDetalhada = () => {
         totalRows: rows.length,
         sampleData: rows.slice(0, 3)
       });
+      console.log("🎯 CONFIRMADO: Chamando IA Gemini para gerar gráficos!");
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: { data: rows }
       });
 
       console.log("📋 PlanilhaDetalhada - AI result:", aiResult);
-      console.log("🔍 PlanilhaDetalhada - AI chartConfig:", aiResult.data?.chartConfig);
 
       if (aiResult.error) {
         console.error("❌ PlanilhaDetalhada - AI function error:", aiResult.error);
@@ -100,30 +100,52 @@ const PlanilhaDetalhada = () => {
         return;
       }
 
-      // Convert Chart.js format to our standard format
-      const convertedCharts = aiResult.data.chartConfig.map((chart: any, index: number) => {
-        const title = chart.options?.plugins?.title?.text || 
-                     chart.data?.datasets?.[0]?.label || 
-                     `Gráfico ${index + 1}`;
+      console.log("🎯 CONFIRMADO: Gráficos recebidos da IA Gemini!");
 
+      // Convert charts to our standard format
+      const convertedCharts = aiResult.data.chartConfig.map((chart: any, index: number) => {
+        const title = chart.title || `Gráfico ${index + 1}`;
+        
+        // Handle the new improved format
+        if (chart.data && Array.isArray(chart.data)) {
+          const validData = chart.data.filter((item: any) => 
+            item && typeof item.label === 'string' && typeof item.value === 'number'
+          );
+
+          if (validData.length > 0) {
+            return {
+              type: chart.type || 'bar',
+              title: title,
+              data: validData
+            };
+          }
+        }
+
+        // Fallback for Chart.js format
         const labels = chart.data?.labels || [];
         const dataset = chart.data?.datasets?.[0];
         const values = dataset?.data || [];
 
-        const standardData = labels.map((label: string, idx: number) => ({
-          label: String(label || `Item ${idx + 1}`),
-          value: Number(values[idx]) || 0
-        })).filter((item: any) => item.label && (item.value >= 0 || !isNaN(item.value)));
+        if (labels.length > 0 && values.length > 0) {
+          const standardData = labels.map((label: string, idx: number) => ({
+            label: String(label || `Item ${idx + 1}`),
+            value: Number(values[idx]) || 0
+          })).filter((item: any) => item.label && (item.value >= 0 || !isNaN(item.value)));
 
-        return {
-          type: chart.type || 'bar',
-          title: title,
-          data: standardData
-        };
-      }).filter((chart: any) => chart.data.length > 0);
+          if (standardData.length > 0) {
+            return {
+              type: chart.type || 'bar',
+              title: title,
+              data: standardData
+            };
+          }
+        }
+
+        return null;
+      }).filter(Boolean);
 
       console.log("✅ PlanilhaDetalhada - Charts converted:", convertedCharts.length);
-      console.log("✅ CONFIRMED: Charts rendered in PlanilhaDetalhada are from Gemini AI!");
+      console.log("✅ CONFIRMADO: Charts exibidos são da IA Gemini!");
       setCharts(convertedCharts);
 
     } catch (err) {
