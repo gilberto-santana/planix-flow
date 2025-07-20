@@ -9,7 +9,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    console.log("🚀 Iniciando função generate-ai-charts");
+    console.log("🚀 Iniciando função generate-ai-charts")
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) throw new Error("Chave API do Gemini não configurada.")
@@ -77,17 +77,12 @@ Return a single JSON object like:
 
     const userPrompt = `Analyze this spreadsheet data and provide comprehensive business intelligence insights:\n\n${JSON.stringify(inputData, null, 2)}`
 
-    console.log("🤖 Enviando dados para Gemini...");
+    console.log("🤖 Enviando dados para Gemini...")
 
     const result = await model.generateContent({
       contents: [
         {
-          role: "user",
-          parts: [
-            {
-              text: `${systemInstruction}\n\n${userPrompt}`
-            }
-          ]
+          parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }]
         }
       ]
     })
