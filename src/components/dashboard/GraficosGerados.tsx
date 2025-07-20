@@ -1,114 +1,90 @@
-
-import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 import { useCharts } from "@/contexts/ChartsContext";
-import ChartRenderer from "@/components/panel/ChartRenderer";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
-import { useRef } from "react";
+import { Card } from "@/components/ui/card";
+import { Bar, Doughnut, Pie, Line } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  Title,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  ArcElement,
+  BarElement,
+  PointElement,
+  LineElement,
+} from "chart.js";
+
+ChartJS.register(
+  Title,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  ArcElement,
+  BarElement,
+  PointElement,
+  LineElement
+);
 
 const GraficosGerados = () => {
-  const navigate = useNavigate();
-  const { charts, fileName } = useCharts();
-  const chartsRef = useRef<HTMLDivElement>(null);
+  const { charts } = useCharts();
 
-  console.log("📊 GraficosGerados - Estado atual:", { 
-    chartsLength: charts.length, 
-    fileName,
-    firstChart: charts[0] 
-  });
-
-  const handleBack = () => {
-    navigate("/dashboard/stats?type=home");
-  };
-
-  const downloadAsImage = async () => {
-    if (!chartsRef.current) return;
-    try {
-      const canvas = await html2canvas(chartsRef.current);
-      const link = document.createElement("a");
-      link.download = `graficos-${fileName || 'planilha'}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch (error) {
-      console.error("Erro ao baixar imagem:", error);
-    }
-  };
-
-  const downloadAsPDF = async () => {
-    if (!chartsRef.current) return;
-    try {
-      const canvas = await html2canvas(chartsRef.current);
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF();
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`graficos-${fileName || 'planilha'}.pdf`);
-    } catch (error) {
-      console.error("Erro ao baixar PDF:", error);
-    }
-  };
-
-  if (charts.length === 0) {
+  if (!charts || charts.length === 0) {
     return (
-      <div className="p-4 space-y-6">
-        <div className="flex justify-between items-center">
-          <Button onClick={handleBack}>← Voltar</Button>
-        </div>
-
-        <div className="text-center py-16 space-y-4">
-          <div className="w-24 h-24 mx-auto bg-muted rounded-full flex items-center justify-center">
-            <svg className="w-12 h-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-medium text-muted-foreground">
-            Nenhum gráfico gerado
-          </h3>
-          <p className="text-muted-foreground">
-            Faça upload de uma planilha (.csv ou .xlsx) primeiro para gerar gráficos
-          </p>
-          <Button onClick={() => navigate("/dashboard/stats?type=home")}>
-            Fazer Upload de Planilha
-          </Button>
-        </div>
+      <div className="text-center text-muted-foreground py-12">
+        Nenhum gráfico gerado ainda.
       </div>
     );
   }
 
+  const renderChart = (chart: any, index: number) => {
+    const labels = chart.data.map((d: any) => d.label);
+    const values = chart.data.map((d: any) => d.value);
+
+    const data = {
+      labels,
+      datasets: [
+        {
+          label: chart.title,
+          data: values,
+          backgroundColor: [
+            "rgba(75, 192, 192, 0.5)",
+            "rgba(255, 99, 132, 0.5)",
+            "rgba(255, 205, 86, 0.5)",
+            "rgba(54, 162, 235, 0.5)",
+            "rgba(153, 102, 255, 0.5)",
+            "rgba(201, 203, 207, 0.5)",
+          ],
+          borderColor: "rgba(0,0,0,0.1)",
+          borderWidth: 1,
+        },
+      ],
+    };
+
+    const options = {
+      responsive: true,
+      plugins: {
+        legend: { display: true, position: "top" as const },
+        title: { display: true, text: chart.title },
+      },
+    };
+
+    const type = chart.type || "bar";
+
+    return (
+      <Card key={index} className="p-4 my-4">
+        {type === "bar" && <Bar data={data} options={options} />}
+        {type === "doughnut" && <Doughnut data={data} options={options} />}
+        {type === "pie" && <Pie data={data} options={options} />}
+        {type === "line" && <Line data={data} options={options} />}
+      </Card>
+    );
+  };
+
   return (
-    <div className="p-4 space-y-6">
-      <div className="flex justify-between items-center">
-        <Button onClick={handleBack}>← Voltar</Button>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={downloadAsImage}>
-            Baixar como Imagem
-          </Button>
-          <Button variant="outline" onClick={downloadAsPDF}>
-            Baixar como PDF
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <h2 className="text-xl font-bold">Gráficos Gerados</h2>
-        {fileName && (
-          <p className="text-muted-foreground">
-            Planilha: <span className="font-medium">{fileName}</span> • {charts.length} gráfico{charts.length !== 1 ? 's' : ''}
-          </p>
-        )}
-      </div>
-
-      <div ref={chartsRef} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {charts.map((chart, i) => {
-          console.log(`📊 Renderizando gráfico ${i + 1}:`, chart);
-          return (
-            <ChartRenderer key={i} chart={chart} />
-          );
-        })}
-      </div>
+    <div className="max-w-4xl mx-auto px-4 py-6">
+      <h2 className="text-xl font-semibold mb-4">Gráficos gerados pela IA</h2>
+      {charts.map((chart, index) => renderChart(chart, index))}
     </div>
   );
 };
