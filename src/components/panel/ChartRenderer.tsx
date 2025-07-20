@@ -30,9 +30,9 @@ const ChartRenderer = ({ chart }: Props) => {
     );
   }
 
-  // Transform and validate data for recharts
+  // Transform and validate data for recharts (convert label to name for recharts compatibility)
   const chartData = chart.data.map((item, index) => {
-    const name = item.name || item.label || `Item ${index + 1}`;
+    const name = item.label || `Item ${index + 1}`;
     const value = Number(item.value) || 0;
     
     console.log(`📈 Data point ${index}:`, { original: item, transformed: { name, value } });

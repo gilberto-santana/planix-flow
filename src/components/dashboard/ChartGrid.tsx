@@ -62,9 +62,9 @@ export const ChartGrid = ({ charts }: ChartGridProps) => {
           );
         }
 
-        // Transform chart data for recharts (standardize to use 'name' field)
+        // Transform chart data for recharts (convert label to name for recharts compatibility)
         const chartData = chart.data.map((item, dataIndex) => {
-          const name = item.name || item.label || `Item ${dataIndex + 1}`;
+          const name = item.label || `Item ${dataIndex + 1}`;
           const value = Number(item.value) || 0;
           
           return { name, value };
