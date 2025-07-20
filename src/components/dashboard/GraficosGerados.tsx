@@ -3,10 +3,12 @@
 import { useCharts } from "@/contexts/ChartsContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartRenderer } from "@/components/charts/ChartRenderer";
+import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { Loader2 } from "lucide-react";
 
 const GraficosGerados = () => {
-  const { charts, loading } = useCharts();
+  const { charts } = useCharts();
+  const { loading } = useFileProcessing();
 
   if (loading) {
     return (
