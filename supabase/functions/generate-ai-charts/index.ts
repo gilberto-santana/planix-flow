@@ -97,66 +97,152 @@ Deno.serve(async (req) => {
       columns: columns
     });
 
-    // Enhanced prompt for better chart generation
-    const prompt = `Você é um especialista em análise de dados e visualização. Analise os dados estruturados da planilha abaixo e gere gráficos relevantes em formato JSON compatível com Chart.js.
+    // Prepare data for BI analysis
+    const inputData = {
+      file_name: `planilha_${Date.now()}.xlsx`,
+      data: rows.map(row => {
+        const cleanRow: any = {};
+        columns.forEach(col => {
+          cleanRow[col] = row[col] || '';
+        });
+        return cleanRow;
+      })
+    };
 
-ESTRUTURA DOS DADOS:
-Colunas: ${columns.join(', ')}
-Total de linhas: ${rowMap.size}
+    // Business Intelligence system instruction
+    const systemInstruction = `You are a Business Intelligence Microservice. Your sole purpose is to receive spreadsheet data (converted to JSON format) and return a well-structured JSON object with deep insights, KPIs, strategic recommendations, and ready-to-render visualizations for a SaaS dashboard.
 
-DADOS DA PLANILHA:
-${JSON.stringify(structuredData, null, 2)}
+⚠️ WARNING: Do not generate any explanation or natural language text outside the JSON output. Only return a pure JSON object.
 
-INSTRUÇÕES CRÍTICAS:
-1. ANALISE AS COLUNAS REAIS da planilha: ${columns.join(', ')}
-2. Use os NOMES REAIS das colunas como labels nos gráficos
-3. Identifique colunas numéricas para valores e colunas categóricas para labels
-4. Crie gráficos que façam sentido para os dados (ex: se tem "Produto" e "Quantidade", faça um gráfico de barras)
-5. Para cada gráfico, use dados reais da planilha, não dados fictícios
-6. Responda APENAS com um array JSON válido, sem texto adicional
+🧠 Context:
+- The input may come from any type of spreadsheet: sales, inventory, HR, finance, marketing, etc.
+- Your role is to understand the context and content of each spreadsheet dynamically.
+- Use your intelligence to detect field names, types (number, text, date), and infer business meaning without any prior schema.
 
-FORMATO DE RESPOSTA (exatamente assim):
-[
-  {
-    "type": "bar|line|pie",
-    "data": {
-      "labels": ["valor_real_coluna1", "valor_real_coluna2"],
-      "datasets": [{
-        "label": "Nome_Real_da_Coluna",
-        "data": [valor_numerico_real1, valor_numerico_real2],
-        "backgroundColor": ["#3B82F6", "#10B981", "#F59E0B"],
-        "borderColor": ["#1E40AF", "#047857", "#D97706"],
-        "borderWidth": 1
-      }]
-    },
-    "options": {
-      "responsive": true,
-      "plugins": {
-        "title": {
-          "display": true,
-          "text": "Título_Baseado_Nos_Dados_Reais"
-        }
+📥 Input Format:
+You will receive an object like:
+{
+  "file_name": "example_file.xlsx",
+  "data": [
+    { "Column1": "ValueA", "Column2": 120, "Column3": "2025-01-15" },
+    { "Column1": "ValueB", "Column2": 150, "Column3": "2025-01-16" },
+    ...
+  ]
+}
+
+📤 Output Format (STRICT):
+Return a single JSON object like:
+{
+  "analysis_summary": {
+    "source_file": "example_file.xlsx",
+    "total_rows": 1500,
+    "total_columns": 8,
+    "executive_summary": "Short summary of the most relevant business insights for a decision-maker.",
+    "identified_kpis": [
+      { "name": "Total Sales", "value": 45892.0, "format": "currency_brl" },
+      { "name": "Total Orders", "value": 1499, "format": "integer" },
+      { "name": "Average Ticket", "value": 30.61, "format": "currency_brl" }
+    ]
+  },
+  "data_quality": {
+    "overall_score": 0.95,
+    "issues": [
+      {
+        "type": "Missing Values",
+        "column": "Customer",
+        "details": "35 null values (2.3%)",
+        "recommendation": "Suggest imputation or row removal."
+      }
+    ]
+  },
+  "visualizations": [
+    {
+      "chart_id": "v1",
+      "title": "Sales by Category",
+      "chart_type": "bar",
+      "data": {
+        "labels": ["Category A", "Category B", "Category C"],
+        "datasets": [
+          {
+            "label": "Total Sales",
+            "data": [12500, 9800, 8700]
+          }
+        ]
+      },
+      "interpretation": {
+        "observation": "Category A leads in sales.",
+        "strategic_insight": "Focus marketing efforts on Category B and C."
       }
     }
-  }
-]
+  ],
+  "top_performers": {
+    "products": [
+      { "name": "Frappuccino", "sales": 142, "revenue": 2556.0 }
+    ],
+    "employees": [
+      { "name": "Diego", "sales": 320, "revenue": 9850.0 }
+    ]
+  },
+  "recommendations": [
+    {
+      "priority": "high",
+      "action": "Create morning combo: Coffee + Donut",
+      "reason": "Donut has high volume and can increase beverage sales"
+    }
+  ],
+  "future_analysis_suggestions": [
+    "Cross sales data with customer segments to detect behavior patterns",
+    "Perform sentiment analysis if text fields like comments or reviews exist"
+  ]
+}`;
 
-IMPORTANTE: Use apenas os nomes de colunas e dados que realmente existem na planilha!`
+    const userPrompt = `Analyze this spreadsheet data and provide comprehensive business intelligence insights:\n\n${JSON.stringify(inputData, null, 2)}`;
 
     console.log("🤖 Enviando dados para Gemini...");
 
-    const result = await model.generateContent(prompt)
+    // Use system instruction and user prompt for better BI analysis
+    const result = await model.generateContent([
+      { role: 'user', parts: [{ text: systemInstruction }] },
+      { role: 'model', parts: [{ text: 'I understand. I will analyze spreadsheet data and return only structured JSON with business intelligence insights, visualizations, and recommendations.' }] },
+      { role: 'user', parts: [{ text: userPrompt }] }
+    ])
+    
     const response = await result.response
     const responseText = response.text()
 
     console.log("📝 Resposta bruta do Gemini:", responseText.substring(0, 200) + "...");
 
-    // Tentar fazer parse da resposta
+    // Parse BI response and extract visualizations
+    let biResponse
     let chartConfig
     try {
       // Limpar a resposta caso tenha markdown ou texto extra
       const cleanResponse = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      chartConfig = JSON.parse(cleanResponse)
+      biResponse = JSON.parse(cleanResponse)
+      
+      // Extract visualizations from BI response
+      if (biResponse.visualizations && Array.isArray(biResponse.visualizations)) {
+        console.log("✅ BI Analysis successful, extracting", biResponse.visualizations.length, "visualizations");
+        
+        // Convert BI visualizations to Chart.js format
+        chartConfig = biResponse.visualizations.map(viz => ({
+          type: viz.chart_type,
+          data: viz.data,
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: viz.title
+              }
+            }
+          }
+        }));
+        
+        console.log("📊 Extracted charts:", chartConfig.length);
+      } else {
+        throw new Error("No visualizations found in BI response");
+      }
     } catch (e) {
       console.error("❌ Erro ao fazer parse da resposta do Gemini:", e);
       console.error("Resposta original:", responseText);
