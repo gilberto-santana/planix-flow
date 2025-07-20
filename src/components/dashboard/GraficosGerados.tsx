@@ -1,90 +1,49 @@
-import { useCharts } from "@/contexts/ChartsContext";
-import { Card } from "@/components/ui/card";
-import { Bar, Doughnut, Pie, Line } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  Title,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  ArcElement,
-  BarElement,
-  PointElement,
-  LineElement,
-} from "chart.js";
+// src/components/dashboard/GraficosGerados.tsx
 
-ChartJS.register(
-  Title,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  ArcElement,
-  BarElement,
-  PointElement,
-  LineElement
-);
+import { useCharts } from "@/contexts/ChartsContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartRenderer } from "@/components/charts/ChartRenderer";
+import { Loader2 } from "lucide-react";
 
 const GraficosGerados = () => {
-  const { charts } = useCharts();
+  const { charts, loading } = useCharts();
 
-  if (!charts || charts.length === 0) {
+  if (loading) {
     return (
-      <div className="text-center text-muted-foreground py-12">
-        Nenhum gráfico gerado ainda.
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="animate-spin mr-2" />
+        <span>Gerando gráficos com IA...</span>
       </div>
     );
   }
 
-  const renderChart = (chart: any, index: number) => {
-    const labels = chart.data.map((d: any) => d.label);
-    const values = chart.data.map((d: any) => d.value);
-
-    const data = {
-      labels,
-      datasets: [
-        {
-          label: chart.title,
-          data: values,
-          backgroundColor: [
-            "rgba(75, 192, 192, 0.5)",
-            "rgba(255, 99, 132, 0.5)",
-            "rgba(255, 205, 86, 0.5)",
-            "rgba(54, 162, 235, 0.5)",
-            "rgba(153, 102, 255, 0.5)",
-            "rgba(201, 203, 207, 0.5)",
-          ],
-          borderColor: "rgba(0,0,0,0.1)",
-          borderWidth: 1,
-        },
-      ],
-    };
-
-    const options = {
-      responsive: true,
-      plugins: {
-        legend: { display: true, position: "top" as const },
-        title: { display: true, text: chart.title },
-      },
-    };
-
-    const type = chart.type || "bar";
-
+  if (!charts || charts.length === 0) {
     return (
-      <Card key={index} className="p-4 my-4">
-        {type === "bar" && <Bar data={data} options={options} />}
-        {type === "doughnut" && <Doughnut data={data} options={options} />}
-        {type === "pie" && <Pie data={data} options={options} />}
-        {type === "line" && <Line data={data} options={options} />}
-      </Card>
+      <div className="text-center text-muted-foreground mt-8">
+        Nenhum gráfico gerado até o momento.
+      </div>
     );
-  };
+  }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
-      <h2 className="text-xl font-semibold mb-4">Gráficos gerados pela IA</h2>
-      {charts.map((chart, index) => renderChart(chart, index))}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {charts.map((chart, index) => {
+        if (!chart || !chart.type || !chart.data) {
+          console.warn("Gráfico inválido:", chart);
+          return null;
+        }
+
+        return (
+          <Card key={index} className="mb-4">
+            <CardHeader>
+              <CardTitle>{chart.title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ChartRenderer chart={chart} />
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 };
