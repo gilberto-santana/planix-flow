@@ -1,136 +1,97 @@
 // supabase/functions/generate-ai-charts/index.ts
 
-import { corsHeaders } from '../_shared/cors.ts'
-import { GoogleGenerativeAI } from 'npm:@google/generative-ai'
+import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from "@supabase/supabase-js";
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+serve(async (req) => {
+  console.log("\u{1F680} Iniciando função generate-ai-charts");
+
+  const body = await req.json();
+
+  if (!body || !body.sheetName || !body.structuredData) {
+    return new Response(
+      JSON.stringify({ error: "Parâmetros obrigatórios ausentes" }),
+      { status: 400 }
+    );
   }
+
+  const { sheetName, structuredData } = body;
+  console.log("\u{1F4E8} Body recebido:", body);
+
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+
+  if (!GEMINI_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "Chave da API do Gemini ausente" }),
+      { status: 500 }
+    );
+  }
+  console.log("✅ Chave API encontrada, comprimento:", GEMINI_API_KEY.length);
+
+  const systemInstruction = `Você é um assistente especialista em inteligência de negócios. Sempre que receber dados de planilha, sua função é gerar gráficos analíticos úteis, objetivos e personalizados, mesmo sem saber previamente o contexto. Siga estas instruções:
+
+- Analise a estrutura dos dados e os campos disponíveis (nomes, datas, números, categorias, etc).
+- Detecte o tipo de planilha (ex: vendas, estoque, clientes, etc) apenas com base nos rótulos e valores.
+- Crie no mínimo 3 e no máximo 10 gráficos diferentes que ajudem o gestor a tomar decisões estratégicas.
+- Cada gráfico deve conter: title, description, type (bar, pie, line, table etc), xKey, yKey e summary.
+- Crie gráficos apenas com base em dados presentes na planilha. Nunca invente colunas.
+- Evite gráficos óbvios. Priorize insights mais profundos, como rankings, correlações, tendências, outliers, etc.
+- Identifique o campo temporal (data, mês, etc) se houver, e use como base para séries temporais.
+- Utilize todos os dados disponíveis — inclusive campos de texto e categorias.
+- Seja objetivo, evite repetições e não inclua instruções na resposta.`;
+
+  const userPrompt = `Os dados da planilha são os seguintes:
+
+${JSON.stringify(structuredData, null, 2)}
+
+Gere os gráficos com base nesses dados, seguindo as instruções.`;
+
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+  console.log("\u{1F916} Enviando dados para Gemini...");
 
   try {
-    console.log("🚀 Iniciando função generate-ai-charts")
+    const result = await model.generateContent(`${systemInstruction}\n\n${userPrompt}`);
+    const response = await result.response;
+    const text = response.text();
 
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!geminiApiKey) throw new Error("Chave API do Gemini não configurada.")
+    console.log("\u{1F4C8} Resposta do Gemini recebida:", text);
 
-    const contentType = req.headers.get("content-type") || ""
-    if (!contentType.includes("application/json")) throw new Error("Content-Type inválido")
+    const parsed = JSON.parse(text);
 
-    const bodyText = await req.text()
-    if (!bodyText) throw new Error("Corpo da requisição vazio.")
-    const body = JSON.parse(bodyText)
-
-    const { data: sheetData } = body
-    if (!sheetData || !Array.isArray(sheetData) || sheetData.length === 0) throw new Error("Dados da planilha inválidos")
-
-    const genAI = new GoogleGenerativeAI(geminiApiKey)
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-
-    const columnMap = new Map()
-    const rowMap = new Map()
-    sheetData.forEach((row: any) => {
-      const col = row.column_name || `Coluna ${row.column_index}`
-      const rowIdx = row.row_index
-      const val = row.cell_value || row.value || ''
-      if (!columnMap.has(col)) columnMap.set(col, [])
-      if (!rowMap.has(rowIdx)) rowMap.set(rowIdx, {})
-      columnMap.get(col).push(val)
-      rowMap.get(rowIdx)[col] = val
-    })
-
-    const columns = Array.from(columnMap.keys())
-    const rows = Array.from(rowMap.values()).slice(0, 50)
-
-    const inputData = {
-      file_name: `planilha_${Date.now()}.xlsx`,
-      data: rows.map(row => {
-        const clean: any = {}
-        columns.forEach(col => clean[col] = row[col] || '')
-        return clean
-      })
+    if (!Array.isArray(parsed)) {
+      throw new Error("Resposta da IA não é um array de gráficos");
     }
 
-    const systemInstruction = `You are a Business Intelligence Microservice. Your sole purpose is to receive spreadsheet data (converted to JSON format) and return a well-structured JSON object with deep insights, KPIs, strategic recommendations, and ready-to-render visualizations for a SaaS dashboard.
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-⚠️ WARNING: Do not generate any explanation or natural language text outside the JSON output. Only return a pure JSON object.
+    const chartData = parsed.map((chart: any) => ({
+      sheet_name: sheetName,
+      ...chart,
+    }));
 
-🧠 Context:
-- The input may come from any type of spreadsheet: sales, inventory, HR, finance, marketing, etc.
-- Your role is to understand the context and content of each spreadsheet dynamically.
-- Use your intelligence to detect field names, types (number, text, date), and infer business meaning without any prior schema.
+    const { error } = await supabase.from("chart_data").insert(chartData);
 
-📥 Input Format:
-You will receive an object like:
-{
-  "file_name": "example_file.xlsx",
-  "data": [ { "Column1": "ValueA", "Column2": 120 }, ... ]
-}
-
-📤 Output Format (STRICT):
-Return a single JSON object like:
-{
-  "analysis_summary": { ... },
-  "visualizations": [ ... ],
-  ...
-}`
-
-    const userPrompt = `Analyze this spreadsheet data and provide comprehensive business intelligence insights:\n\n${JSON.stringify(inputData, null, 2)}`
-
-    console.log("🤖 Enviando dados para Gemini...")
-
-    const result = await model.generateContent({
-      contents: [
-        {
-          parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }]
-        }
-      ]
-    })
-
-    const response = await result.response
-    const responseText = response.text()
-
-    let biResponse
-    let chartConfig
-    try {
-      const clean = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      biResponse = JSON.parse(clean)
-
-      if (biResponse.visualizations && Array.isArray(biResponse.visualizations)) {
-        chartConfig = biResponse.visualizations.map(viz => ({
-          type: viz.chart_type,
-          data: viz.data,
-          options: {
-            responsive: true,
-            plugins: {
-              title: {
-                display: true,
-                text: viz.title
-              }
-            }
-          }
-        }))
-      } else {
-        throw new Error("No visualizations found in BI response")
-      }
-    } catch (e) {
-      console.error("❌ Erro no parsing da resposta do Gemini:", e)
-      chartConfig = []
+    if (error) {
+      console.error("Erro ao salvar gráficos:", error);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+      });
     }
 
-    if (!Array.isArray(chartConfig)) chartConfig = [chartConfig]
+    console.log(`✅ Gráficos gerados: ${chartData.length}`);
 
-    console.log("✅ Gráficos gerados:", chartConfig.length)
-
-    return new Response(JSON.stringify({ chartConfig }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
-    })
-  } catch (error) {
-    console.error("❌ Erro na função generate-ai-charts:", error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
-    })
+    return new Response(JSON.stringify({ success: true }));
+  } catch (err) {
+    console.error("❌ Erro na função generate-ai-charts:", err);
+    return new Response(
+      JSON.stringify({ error: "Falha ao gerar os gráficos com a IA" }),
+      { status: 500 }
+    );
   }
-})
+});
