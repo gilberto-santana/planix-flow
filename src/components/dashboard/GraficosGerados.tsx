@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartRenderer } from "@/components/charts/ChartRenderer";
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { Loader2 } from "lucide-react";
+import { useFileProcessing } from "@/hooks/useFileProcessing";
 
 const GraficosGerados = () => {
   const { charts } = useCharts();
