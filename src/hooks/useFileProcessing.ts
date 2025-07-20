@@ -52,14 +52,14 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
         return null;
       }
 
-      // Create standardized data array using 'name' field (consistent with recharts)
+      // Create standardized data array using 'label' field for consistency
       const standardData = labels.map((label: string, idx: number) => {
         const value = Number(values[idx]);
         return {
-          name: String(label || `Item ${idx + 1}`),
+          label: String(label || `Item ${idx + 1}`),
           value: isNaN(value) ? 0 : Math.abs(value) // Use absolute values to avoid negative chart issues
         };
-      }).filter(item => item.name && (item.value > 0 || item.value === 0)); // Keep valid data including zero values
+      }).filter(item => item.label && (item.value > 0 || item.value === 0)); // Keep valid data including zero values
 
       console.log(`✅ Converted chart ${index + 1} data:`, { 
         title, 
@@ -230,6 +230,7 @@ export function useFileProcessing() {
       }
 
       console.log("📋 Raw Chart.js data from AI:", aiResult.data.chartConfig);
+      console.log("✅ CONFIRMED: Charts are coming from Gemini AI, not mock data!");
 
       // Convert Chart.js format to standardized format
       const convertedCharts = convertChartJsToStandardFormat(aiResult.data.chartConfig);

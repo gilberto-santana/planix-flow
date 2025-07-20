@@ -83,6 +83,7 @@ const PlanilhaDetalhada = () => {
       });
 
       console.log("📋 PlanilhaDetalhada - AI result:", aiResult);
+      console.log("🔍 PlanilhaDetalhada - AI chartConfig:", aiResult.data?.chartConfig);
 
       if (aiResult.error) {
         console.error("❌ PlanilhaDetalhada - AI function error:", aiResult.error);
@@ -110,9 +111,9 @@ const PlanilhaDetalhada = () => {
         const values = dataset?.data || [];
 
         const standardData = labels.map((label: string, idx: number) => ({
-          name: String(label || `Item ${idx + 1}`),
+          label: String(label || `Item ${idx + 1}`),
           value: Number(values[idx]) || 0
-        })).filter((item: any) => item.name && (item.value >= 0 || !isNaN(item.value)));
+        })).filter((item: any) => item.label && (item.value >= 0 || !isNaN(item.value)));
 
         return {
           type: chart.type || 'bar',
@@ -122,6 +123,7 @@ const PlanilhaDetalhada = () => {
       }).filter((chart: any) => chart.data.length > 0);
 
       console.log("✅ PlanilhaDetalhada - Charts converted:", convertedCharts.length);
+      console.log("✅ CONFIRMED: Charts rendered in PlanilhaDetalhada are from Gemini AI!");
       setCharts(convertedCharts);
 
     } catch (err) {

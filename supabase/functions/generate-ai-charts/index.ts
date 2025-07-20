@@ -52,41 +52,96 @@ Deno.serve(async (req) => {
     // Usar modelo mais recente e confiável
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
-    // Prompt melhorado para gerar JSON válido
-    const prompt = `Você é um especialista em análise de dados e visualização. Analise os seguintes dados de planilha e gere até 10 gráficos em formato JSON compatível com Chart.js.
+    // Convert raw spreadsheet data to structured format
+    console.log("🔄 Processing spreadsheet data structure...");
+    
+    // Group data by column to understand spreadsheet structure
+    const columnMap = new Map();
+    const rowMap = new Map();
+    
+    sheetData.forEach((row: any) => {
+      const columnName = row.column_name || `Coluna ${row.column_index}`;
+      const rowIndex = row.row_index;
+      const cellValue = row.cell_value || row.value || '';
+      
+      if (!columnMap.has(columnName)) {
+        columnMap.set(columnName, []);
+      }
+      
+      if (!rowMap.has(rowIndex)) {
+        rowMap.set(rowIndex, {});
+      }
+      
+      columnMap.get(columnName).push(cellValue);
+      rowMap.get(rowIndex)[columnName] = cellValue;
+    });
+    
+    // Create structured data representation
+    const columns = Array.from(columnMap.keys());
+    const rows = Array.from(rowMap.values()).slice(0, 50); // Limit to first 50 rows for AI processing
+    
+    const structuredData = {
+      columns: columns,
+      totalRows: rowMap.size,
+      sampleRows: rows.slice(0, 10),
+      columnSummary: columns.map(col => ({
+        name: col,
+        sampleValues: columnMap.get(col).slice(0, 5),
+        totalValues: columnMap.get(col).length
+      }))
+    };
+    
+    console.log("📊 Structured data for AI:", {
+      totalColumns: columns.length,
+      totalRows: rowMap.size,
+      columns: columns
+    });
+
+    // Enhanced prompt for better chart generation
+    const prompt = `Você é um especialista em análise de dados e visualização. Analise os dados estruturados da planilha abaixo e gere gráficos relevantes em formato JSON compatível com Chart.js.
+
+ESTRUTURA DOS DADOS:
+Colunas: ${columns.join(', ')}
+Total de linhas: ${rowMap.size}
 
 DADOS DA PLANILHA:
-${JSON.stringify(sheetData, null, 2)}
+${JSON.stringify(structuredData, null, 2)}
 
-INSTRUÇÕES:
-1. Analise os dados e identifique padrões interessantes
-2. Crie gráficos relevantes (barras, linhas, pizza) baseados nos dados
-3. Responda APENAS com um array JSON válido, sem texto adicional
-4. Cada gráfico deve ter esta estrutura:
-{
-  "type": "bar|line|pie",
-  "data": {
-    "labels": ["Label1", "Label2"],
-    "datasets": [{
-      "label": "Nome do Dataset",
-      "data": [valor1, valor2],
-      "backgroundColor": ["#3B82F6", "#10B981"],
-      "borderColor": ["#1E40AF", "#047857"],
-      "borderWidth": 1
-    }]
-  },
-  "options": {
-    "responsive": true,
-    "plugins": {
-      "title": {
-        "display": true,
-        "text": "Título do Gráfico"
+INSTRUÇÕES CRÍTICAS:
+1. ANALISE AS COLUNAS REAIS da planilha: ${columns.join(', ')}
+2. Use os NOMES REAIS das colunas como labels nos gráficos
+3. Identifique colunas numéricas para valores e colunas categóricas para labels
+4. Crie gráficos que façam sentido para os dados (ex: se tem "Produto" e "Quantidade", faça um gráfico de barras)
+5. Para cada gráfico, use dados reais da planilha, não dados fictícios
+6. Responda APENAS com um array JSON válido, sem texto adicional
+
+FORMATO DE RESPOSTA (exatamente assim):
+[
+  {
+    "type": "bar|line|pie",
+    "data": {
+      "labels": ["valor_real_coluna1", "valor_real_coluna2"],
+      "datasets": [{
+        "label": "Nome_Real_da_Coluna",
+        "data": [valor_numerico_real1, valor_numerico_real2],
+        "backgroundColor": ["#3B82F6", "#10B981", "#F59E0B"],
+        "borderColor": ["#1E40AF", "#047857", "#D97706"],
+        "borderWidth": 1
+      }]
+    },
+    "options": {
+      "responsive": true,
+      "plugins": {
+        "title": {
+          "display": true,
+          "text": "Título_Baseado_Nos_Dados_Reais"
+        }
       }
     }
   }
-}
+]
 
-Responda apenas com o array JSON, começando com [ e terminando com ].`
+IMPORTANTE: Use apenas os nomes de colunas e dados que realmente existem na planilha!`
 
     console.log("🤖 Enviando dados para Gemini...");
 
@@ -106,17 +161,108 @@ Responda apenas com o array JSON, começando com [ e terminando com ].`
       console.error("❌ Erro ao fazer parse da resposta do Gemini:", e);
       console.error("Resposta original:", responseText);
       
-      // Fallback: criar gráfico simples baseado nos dados
-      chartConfig = [{
+      // Improved fallback: create meaningful charts based on actual spreadsheet structure
+      console.log("⚠️ Using fallback chart generation based on spreadsheet structure");
+      
+      const fallbackCharts = [];
+      
+      // Find numeric columns for chart data
+      const numericColumns = columns.filter(col => {
+        const values = columnMap.get(col);
+        const numericValues = values.filter(val => !isNaN(parseFloat(val))).length;
+        return numericValues > values.length * 0.5; // At least 50% numeric values
+      });
+      
+      // Find categorical columns for labels
+      const categoricalColumns = columns.filter(col => !numericColumns.includes(col));
+      
+      console.log("📊 Fallback analysis:", { numericColumns, categoricalColumns });
+      
+      if (numericColumns.length > 0 && categoricalColumns.length > 0) {
+        // Create a chart combining categorical and numeric data
+        const labelColumn = categoricalColumns[0];
+        const valueColumn = numericColumns[0];
+        
+        const chartData = rows.slice(0, 10).map(row => ({
+          label: row[labelColumn] || 'Sem nome',
+          value: parseFloat(row[valueColumn]) || 0
+        })).filter(item => item.label && !isNaN(item.value));
+        
+        fallbackCharts.push({
+          type: "bar",
+          data: {
+            labels: chartData.map(item => item.label),
+            datasets: [{
+              label: valueColumn,
+              data: chartData.map(item => item.value),
+              backgroundColor: ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"],
+              borderColor: ["#1E40AF", "#047857", "#D97706", "#DC2626", "#7C3AED"],
+              borderWidth: 1
+            }]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: `${valueColumn} por ${labelColumn}`
+              }
+            }
+          }
+        });
+      }
+      
+      // If we have multiple numeric columns, create a comparison chart
+      if (numericColumns.length > 1) {
+        const firstNumeric = numericColumns[0];
+        const secondNumeric = numericColumns[1];
+        
+        const comparisonData = rows.slice(0, 8).map((row, index) => ({
+          label: `Linha ${index + 1}`,
+          value1: parseFloat(row[firstNumeric]) || 0,
+          value2: parseFloat(row[secondNumeric]) || 0
+        }));
+        
+        fallbackCharts.push({
+          type: "bar",
+          data: {
+            labels: comparisonData.map(item => item.label),
+            datasets: [
+              {
+                label: firstNumeric,
+                data: comparisonData.map(item => item.value1),
+                backgroundColor: "#3B82F6",
+                borderColor: "#1E40AF",
+                borderWidth: 1
+              },
+              {
+                label: secondNumeric,
+                data: comparisonData.map(item => item.value2),
+                backgroundColor: "#10B981",
+                borderColor: "#047857",
+                borderWidth: 1
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            plugins: {
+              title: {
+                display: true,
+                text: `Comparação: ${firstNumeric} vs ${secondNumeric}`
+              }
+            }
+          }
+        });
+      }
+      
+      chartConfig = fallbackCharts.length > 0 ? fallbackCharts : [{
         type: "bar",
         data: {
-          labels: sheetData.slice(0, 10).map((item, index) => item.column_name || `Item ${index + 1}`),
+          labels: columns.slice(0, 5),
           datasets: [{
-            label: "Dados da Planilha",
-            data: sheetData.slice(0, 10).map(item => {
-              const value = parseFloat(item.cell_value || item.value || "0")
-              return isNaN(value) ? 0 : value
-            }),
+            label: "Contagem de Dados",
+            data: columns.slice(0, 5).map(col => columnMap.get(col).length),
             backgroundColor: "#3B82F6",
             borderColor: "#1E40AF",
             borderWidth: 1
@@ -127,11 +273,11 @@ Responda apenas com o array JSON, começando com [ e terminando com ].`
           plugins: {
             title: {
               display: true,
-              text: "Gráfico Automático dos Dados"
+              text: "Estrutura da Planilha"
             }
           }
         }
-      }]
+      }];
     }
 
     // Validar se chartConfig é um array
