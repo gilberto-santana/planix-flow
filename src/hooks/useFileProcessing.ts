@@ -1,5 +1,3 @@
-// src/hooks/useFileProcessing.ts
-
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -98,11 +96,11 @@ export function useFileProcessing() {
         fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
-      console.log("📤 [UPLOAD] Enviando para processamento...");
+      console.log("📤 [UPLOAD] Chamando função de parse...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
       if (parseResult.error || !parseResult.data?.success) {
-        console.error("❌ [UPLOAD] Erro no processamento:", parseResult.error);
+        console.error("❌ [UPLOAD] Erro no parse:", parseResult.error);
         toast({
           title: "Erro ao processar planilha",
           description: parseResult.error || "Falha no processamento",
@@ -112,11 +110,11 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ [UPLOAD] Planilha processada com sucesso");
+      console.log("✅ [UPLOAD] Parse concluído, aguardando processamento...");
       setFileName(file.name);
-      await new Promise((resolve) => setTimeout(resolve, 2000)); // Aguardar processamento
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      console.log("🔍 [UPLOAD] Buscando dados processados...");
+      console.log("🔍 [UPLOAD] Buscando planilha processada...");
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
@@ -175,19 +173,39 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
-      console.log("🤖 [AI] Enviando dados para IA...", rows.length, "linhas");
+      console.log("🤖 [AI] Preparando dados para IA...");
+      console.log("📋 [AI] Amostra dos dados:", {
+        totalRows: rows.length,
+        sampleData: rows.slice(0, 3)
+      });
+
+      // Prepare data payload with proper structure
+      const payload = {
+        data: rows,
+        metadata: {
+          fileName: file.name,
+          totalRows: rows.length,
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      console.log("🤖 [AI] Enviando para função generate-ai-charts...");
+      console.log("📦 [AI] Payload preparado:", {
+        dataLength: payload.data.length,
+        hasMetadata: !!payload.metadata
+      });
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: { data: rows },
+        body: payload,
         headers: {
           "Content-Type": "application/json",
         },
       });
 
-      console.log("📋 [AI] Resposta da IA:", aiResult);
+      console.log("📋 [AI] Resposta recebida:", aiResult);
 
       if (aiResult.error) {
-        console.error("❌ [AI] Erro na IA:", aiResult.error);
+        console.error("❌ [AI] Erro na função:", aiResult.error);
         toast({
           title: "Erro ao gerar gráficos com IA",
           description: aiResult.error.message,
@@ -197,7 +215,7 @@ export function useFileProcessing() {
         return;
       }
 
-      if (!aiResult.data?.chartConfig) {
+      if (!aiResult.data?.chartConfig || !Array.isArray(aiResult.data.chartConfig)) {
         console.error("❌ [AI] Resposta inválida:", aiResult.data);
         toast({
           title: "Resposta inválida da IA",
@@ -225,10 +243,16 @@ export function useFileProcessing() {
 
       console.log("✅ [SUCCESS] Gráficos convertidos:", convertedCharts.length);
       setCharts(convertedCharts);
+      
+      const sourceMsg = aiResult.data.source === 'fallback' 
+        ? " (dados de exemplo)" 
+        : " pela IA";
+        
       toast({
         title: "Gráficos gerados com sucesso!",
-        description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.`,
+        description: `${convertedCharts.length} gráfico(s) criado(s)${sourceMsg}.`,
       });
+
     } catch (err) {
       console.error("❌ [UPLOAD] Erro inesperado:", err);
       toast({
