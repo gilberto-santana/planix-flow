@@ -190,9 +190,12 @@ export function useFileProcessing() {
       console.log("🤖 Calling AI function with", rows.length, "data points");
       console.log("🎯 IMPORTANTE: Chamando função generate-ai-charts com IA Gemini!");
 
-      // Call the AI function
+      // Call the AI function with proper headers
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify({ data: rows })
+        body: { data: rows },
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       console.log("📋 AI Result:", aiResult);

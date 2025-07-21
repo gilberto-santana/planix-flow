@@ -1,6 +1,4 @@
 
-// supabase/functions/generate-ai-charts/index.ts
-
 import { corsHeaders } from '../_shared/cors.ts'
 import { GoogleGenerativeAI } from 'npm:@google/generative-ai'
 
@@ -11,6 +9,8 @@ Deno.serve(async (req) => {
 
   try {
     console.log("🚀 Iniciando função generate-ai-charts");
+    console.log("📋 Request headers:", Object.fromEntries(req.headers.entries()));
+    console.log("📋 Request method:", req.method);
 
     const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
     if (!geminiApiKey) {
@@ -19,27 +19,54 @@ Deno.serve(async (req) => {
     }
     console.log("✅ Chave API encontrada, comprimento:", geminiApiKey.length);
 
+    // Validação mais flexível do Content-Type
     const contentType = req.headers.get("content-type") || ""
-    if (!contentType.includes("application/json")) {
-      throw new Error("Content-Type inválido")
+    console.log("📋 Content-Type recebido:", contentType);
+    
+    if (!contentType.includes("application/json") && !contentType.includes("text/plain")) {
+      console.warn("⚠️ Content-Type não é JSON, tentando processar mesmo assim...");
     }
 
-    const bodyText = await req.text()
+    let bodyText: string;
+    try {
+      bodyText = await req.text()
+      console.log("📨 Body recebido:", bodyText ? "✅ Não vazio" : "❌ Vazio");
+      console.log("📨 Body length:", bodyText.length);
+    } catch (error) {
+      console.error("❌ Erro ao ler body:", error);
+      throw new Error("Erro ao ler corpo da requisição")
+    }
+
     if (!bodyText) {
+      console.error("❌ Corpo da requisição está vazio");
       throw new Error("Corpo da requisição vazio.")
     }
-    console.log("📨 Body recebido: ✅ Não vazio");
 
-    const body = JSON.parse(bodyText)
+    let body: any;
+    try {
+      body = JSON.parse(bodyText)
+      console.log("✅ JSON parseado com sucesso");
+    } catch (parseError) {
+      console.error("❌ Erro ao fazer parse do JSON:", parseError);
+      console.log("📝 Body que causou erro:", bodyText.substring(0, 200));
+      throw new Error("JSON inválido no corpo da requisição")
+    }
+
     const sheetData = body.data
 
     if (!sheetData || !Array.isArray(sheetData) || sheetData.length === 0) {
-      throw new Error("Dados da planilha inválidos")
+      console.error("❌ Dados inválidos:", { 
+        hasData: !!sheetData, 
+        isArray: Array.isArray(sheetData), 
+        length: sheetData?.length 
+      });
+      throw new Error("Dados da planilha inválidos ou vazios")
     }
 
     console.log("📊 Dados da planilha válidos:", {
       totalRows: sheetData.length,
-      sampleRow: sheetData[0]
+      sampleRow: sheetData[0],
+      dataTypes: sheetData.slice(0, 3).map(row => typeof row)
     });
 
     console.log("🔄 Processing spreadsheet data structure...");
@@ -48,19 +75,28 @@ Deno.serve(async (req) => {
     const columnMap = new Map<string, any[]>()
     const rowMap = new Map<number, Record<string, any>>()
 
-    sheetData.forEach((cell: any) => {
-      const col = cell.column_name || `Coluna ${cell.column_index}`
-      const rowIdx = cell.row_index
-      const val = cell.cell_value ?? cell.value ?? ''
+    sheetData.forEach((cell: any, index: number) => {
+      try {
+        const col = cell.column_name || `Coluna ${cell.column_index}`
+        const rowIdx = cell.row_index
+        const val = cell.cell_value ?? cell.value ?? ''
 
-      if (!columnMap.has(col)) columnMap.set(col, [])
-      if (!rowMap.has(rowIdx)) rowMap.set(rowIdx, {})
-      columnMap.get(col)!.push(val)
-      rowMap.get(rowIdx)![col] = val
+        if (!columnMap.has(col)) columnMap.set(col, [])
+        if (!rowMap.has(rowIdx)) rowMap.set(rowIdx, {})
+        columnMap.get(col)!.push(val)
+        rowMap.get(rowIdx)![col] = val
+      } catch (cellError) {
+        console.warn(`⚠️ Erro processando célula ${index}:`, cellError);
+      }
     })
 
     const columns = Array.from(columnMap.keys())
     const rows = Array.from(rowMap.values()).slice(0, 50) // Limit to 50 rows for AI processing
+
+    if (columns.length === 0 || rows.length === 0) {
+      console.error("❌ Nenhuma coluna ou linha válida encontrada");
+      throw new Error("Não foi possível processar os dados da planilha")
+    }
 
     // Create structured data for AI analysis
     const structuredData = {
@@ -89,7 +125,8 @@ Deno.serve(async (req) => {
     console.log("📊 Structured data for AI:", {
       totalColumns: structuredData.total_columns,
       totalRows: structuredData.total_rows,
-      columns: structuredData.columns
+      columns: structuredData.columns,
+      columnSummariesCount: structuredData.column_summaries.length
     });
 
     const genAI = new GoogleGenerativeAI(geminiApiKey)
@@ -144,21 +181,30 @@ ${JSON.stringify(structuredData, null, 2)}
 Generate 2-4 relevant charts based on the actual data structure. Use real column names and values, not placeholders.`
 
     console.log("🤖 Enviando dados para Gemini...");
+    console.log("📤 Prompt length:", userPrompt.length);
 
-    // FIXED: Correct Gemini API payload structure
-    const result = await model.generateContent({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }]
-        }
-      ]
-    })
+    let result: any;
+    try {
+      // FIXED: Correct Gemini API payload structure
+      result = await model.generateContent({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }]
+          }
+        ]
+      })
+      console.log("✅ Gemini respondeu com sucesso");
+    } catch (geminiError) {
+      console.error("❌ Erro na chamada do Gemini:", geminiError);
+      throw new Error(`Erro na API do Gemini: ${geminiError.message}`)
+    }
 
     const response = await result.response
     const responseText = await response.text()
 
     console.log("📝 Resposta bruta do Gemini:", responseText.slice(0, 200), "...");
+    console.log("📝 Response length:", responseText.length);
 
     let biResponse: any
     let chartConfig: any[] = []
@@ -201,9 +247,18 @@ Generate 2-4 relevant charts based on the actual data structure. Use real column
       const numericColumns = structuredData.column_summaries.filter(col => col.type === 'numeric')
       const categoricalColumns = structuredData.column_summaries.filter(col => col.type === 'categorical')
 
+      console.log("📊 Colunas encontradas:", {
+        numericCount: numericColumns.length,
+        categoricalCount: categoricalColumns.length,
+        numericCols: numericColumns.map(c => c.name),
+        categoricalCols: categoricalColumns.map(c => c.name)
+      });
+
       if (numericColumns.length > 0 && categoricalColumns.length > 0) {
         const categoryCol = categoricalColumns[0].name
         const valueCol = numericColumns[0].name
+
+        console.log("📊 Usando colunas:", { categoryCol, valueCol });
 
         // Group data by category and sum values
         const groupedData = new Map<string, number>()
@@ -212,6 +267,8 @@ Generate 2-4 relevant charts based on the actual data structure. Use real column
           const value = Number(row[valueCol]) || 0
           groupedData.set(category, (groupedData.get(category) || 0) + value)
         })
+
+        console.log("📊 Dados agrupados:", Array.from(groupedData.entries()));
 
         chartConfig = [{
           type: 'bar',
@@ -257,7 +314,12 @@ Generate 2-4 relevant charts based on the actual data structure. Use real column
       console.warn("⚠️ Nenhum gráfico pôde ser gerado");
       return new Response(JSON.stringify({ 
         chartConfig: [],
-        message: "Não foi possível gerar gráficos para esta planilha"
+        message: "Não foi possível gerar gráficos para esta planilha",
+        debug: {
+          columnsFound: columns.length,
+          rowsProcessed: rows.length,
+          structuredData: structuredData
+        }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
@@ -267,16 +329,28 @@ Generate 2-4 relevant charts based on the actual data structure. Use real column
     console.log("✅ Gráficos gerados:", chartConfig.length);
     console.log("🎯 CONFIRMADO: Gráficos gerados pela IA Gemini!");
 
-    return new Response(JSON.stringify({ chartConfig }), {
+    return new Response(JSON.stringify({ 
+      chartConfig,
+      debug: {
+        totalColumns: columns.length,
+        totalRows: rows.length,
+        chartsGenerated: chartConfig.length
+      }
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200
     })
 
   } catch (error) {
     console.error("❌ Erro na função generate-ai-charts:", error)
+    console.error("❌ Stack trace:", error.stack)
     return new Response(JSON.stringify({ 
       error: error.message,
-      chartConfig: []
+      chartConfig: [],
+      debug: {
+        errorType: error.constructor.name,
+        timestamp: new Date().toISOString()
+      }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500

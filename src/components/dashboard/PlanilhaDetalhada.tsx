@@ -80,7 +80,10 @@ const PlanilhaDetalhada = () => {
       console.log("🎯 CONFIRMADO: Chamando IA Gemini para gerar gráficos!");
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: { data: rows }
+        body: { data: rows },
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       console.log("📋 PlanilhaDetalhada - AI result:", aiResult);
