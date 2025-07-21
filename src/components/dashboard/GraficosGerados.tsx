@@ -3,7 +3,7 @@
 
 import { useFileProcessing } from "@/hooks/useFileProcessing";
 import { Card } from "@/components/ui/card";
-import { Bar, Doughnut, Line, Pie } from "react-chartjs-2";
+import { Bar, Line, Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -70,9 +70,6 @@ export default function GraficosGerados() {
             {chart.type === "bar" && <Bar data={data} options={options} />}
             {chart.type === "line" && <Line data={data} options={options} />}
             {chart.type === "pie" && <Pie data={data} options={options} />}
-            {chart.type === "doughnut" && (
-              <Doughnut data={data} options={options} />
-            )}
           </Card>
         );
       })}
