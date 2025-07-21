@@ -26,10 +26,9 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
       const title = chart.title || `Gráfico ${index + 1}`;
 
       if (chart.data && Array.isArray(chart.data)) {
-        const chartData = chart.data.filter((item: any) =>
-          item &&
-          typeof item.label === "string" &&
-          typeof item.value === "number"
+        const chartData = chart.data.filter(
+          (item: any) =>
+            item && typeof item.label === "string" && typeof item.value === "number"
         );
 
         if (chartData.length === 0) return null;
@@ -45,11 +44,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
       const dataset = chart.data?.datasets?.[0];
       const values = dataset?.data || [];
 
-      if (
-        !labels.length ||
-        !values.length ||
-        labels.length !== values.length
-      ) return null;
+      if (!labels.length || !values.length || labels.length !== values.length) return null;
 
       const standardData = labels
         .map((label: string, idx: number) => {
@@ -71,7 +66,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
     }).filter(Boolean);
 
     return convertedCharts;
-  } catch {
+  } catch (error) {
     return [];
   }
 };
@@ -98,7 +93,8 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        fileType:
+          file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
       const parseResult = await callParseUploadedSheetFunction(parseParams);
@@ -114,9 +110,9 @@ export function useFileProcessing() {
       }
 
       setFileName(file.name);
-      await new Promise((r) => setTimeout(r, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const { data: spreadsheets } = await supabase
+      const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
         .eq("file_name", file.name)
@@ -124,7 +120,7 @@ export function useFileProcessing() {
         .order("created_at", { ascending: false })
         .limit(1);
 
-      if (!spreadsheets?.length) {
+      if (spreadsheetError || !spreadsheets?.length) {
         toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
         setLoading(false);
         return;
@@ -132,13 +128,13 @@ export function useFileProcessing() {
 
       const spreadsheetId = spreadsheets[0].id;
 
-      const { data: sheetData } = await supabase
+      const { data: sheetData, error: sheetError } = await supabase
         .from("sheets")
         .select("id")
         .eq("spreadsheet_id", spreadsheetId)
         .limit(1);
 
-      if (!sheetData?.length) {
+      if (sheetError || !sheetData?.length) {
         toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
         setLoading(false);
         return;
@@ -151,8 +147,11 @@ export function useFileProcessing() {
         .select("*")
         .eq("sheet_id", sheetId);
 
-      if (error || !data?.length) {
-        toast({ title: "Nenhum dado encontrado após o upload", variant: "destructive" });
+      if (error || !data || data.length === 0) {
+        toast({
+          title: "Nenhum dado encontrado após o upload.",
+          variant: "destructive",
+        });
         setLoading(false);
         return;
       }
@@ -181,9 +180,9 @@ export function useFileProcessing() {
         return;
       }
 
-      if (!aiResult.data?.chartConfig || aiResult.data.chartConfig.length === 0) {
+      if (!aiResult.data?.chartConfig) {
         toast({
-          title: "Nenhum gráfico gerado",
+          title: "Resposta inválida da IA",
           description: "A IA não retornou dados de gráficos válidos.",
         });
         setLoading(false);
@@ -196,6 +195,7 @@ export function useFileProcessing() {
         toast({
           title: "Erro na conversão dos gráficos",
           description: "Não foi possível converter os gráficos para exibição.",
+          variant: "destructive",
         });
         setLoading(false);
         return;
@@ -206,7 +206,6 @@ export function useFileProcessing() {
         title: "Gráficos gerados com sucesso!",
         description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.`,
       });
-
     } catch (err) {
       toast({
         title: "Erro inesperado no upload",
