@@ -54,7 +54,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
             value: isNaN(value) ? 0 : Math.abs(value),
           };
         })
-        .filter((item: any) => item.label && (item.value > 0 || item.value === 0));
+        .filter((item: any) => item.label && (item.value >= 0));
 
       if (standardData.length === 0) return null;
 
@@ -67,6 +67,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
 
     return convertedCharts;
   } catch (error) {
+    console.error("❌ Erro na conversão de gráficos:", error);
     return [];
   }
 };
@@ -83,6 +84,7 @@ export function useFileProcessing() {
       return;
     }
 
+    console.log("📁 [UPLOAD] Iniciando processamento:", file.name);
     setLoading(true);
     setCharts([]);
 
@@ -93,13 +95,14 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType:
-          file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
+      console.log("📤 [UPLOAD] Enviando para processamento...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
       if (parseResult.error || !parseResult.data?.success) {
+        console.error("❌ [UPLOAD] Erro no processamento:", parseResult.error);
         toast({
           title: "Erro ao processar planilha",
           description: parseResult.error || "Falha no processamento",
@@ -109,9 +112,11 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("✅ [UPLOAD] Planilha processada com sucesso");
       setFileName(file.name);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Aguardar processamento
 
+      console.log("🔍 [UPLOAD] Buscando dados processados...");
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
@@ -121,12 +126,14 @@ export function useFileProcessing() {
         .limit(1);
 
       if (spreadsheetError || !spreadsheets?.length) {
+        console.error("❌ [UPLOAD] Erro ao buscar planilha:", spreadsheetError);
         toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const spreadsheetId = spreadsheets[0].id;
+      console.log("📄 [UPLOAD] Planilha encontrada:", spreadsheetId);
 
       const { data: sheetData, error: sheetError } = await supabase
         .from("sheets")
@@ -135,12 +142,14 @@ export function useFileProcessing() {
         .limit(1);
 
       if (sheetError || !sheetData?.length) {
+        console.error("❌ [UPLOAD] Erro ao buscar aba:", sheetError);
         toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const sheetId = sheetData[0].id;
+      console.log("📊 [UPLOAD] Aba encontrada:", sheetId);
 
       const { data, error } = await supabase
         .from("spreadsheet_data")
@@ -148,6 +157,7 @@ export function useFileProcessing() {
         .eq("sheet_id", sheetId);
 
       if (error || !data || data.length === 0) {
+        console.error("❌ [UPLOAD] Erro ao buscar dados:", error);
         toast({
           title: "Nenhum dado encontrado após o upload.",
           variant: "destructive",
@@ -156,6 +166,8 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("📊 [UPLOAD] Dados encontrados:", data.length, "registros");
+
       const rows = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
         column_index: row.column_index,
@@ -163,14 +175,19 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
+      console.log("🤖 [AI] Enviando dados para IA...", rows.length, "linhas");
+
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify({ data: rows }),
+        body: { data: rows },
         headers: {
           "Content-Type": "application/json",
         },
       });
 
+      console.log("📋 [AI] Resposta da IA:", aiResult);
+
       if (aiResult.error) {
+        console.error("❌ [AI] Erro na IA:", aiResult.error);
         toast({
           title: "Erro ao gerar gráficos com IA",
           description: aiResult.error.message,
@@ -181,17 +198,22 @@ export function useFileProcessing() {
       }
 
       if (!aiResult.data?.chartConfig) {
+        console.error("❌ [AI] Resposta inválida:", aiResult.data);
         toast({
           title: "Resposta inválida da IA",
           description: "A IA não retornou dados de gráficos válidos.",
+          variant: "destructive",
         });
         setLoading(false);
         return;
       }
 
+      console.log("📊 [AI] Gráficos recebidos:", aiResult.data.chartConfig.length);
+
       const convertedCharts = convertChartJsToStandardFormat(aiResult.data.chartConfig);
 
       if (convertedCharts.length === 0) {
+        console.error("❌ [AI] Erro na conversão dos gráficos");
         toast({
           title: "Erro na conversão dos gráficos",
           description: "Não foi possível converter os gráficos para exibição.",
@@ -201,12 +223,14 @@ export function useFileProcessing() {
         return;
       }
 
+      console.log("✅ [SUCCESS] Gráficos convertidos:", convertedCharts.length);
       setCharts(convertedCharts);
       toast({
         title: "Gráficos gerados com sucesso!",
         description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.`,
       });
     } catch (err) {
+      console.error("❌ [UPLOAD] Erro inesperado:", err);
       toast({
         title: "Erro inesperado no upload",
         description: err instanceof Error ? err.message : "Erro desconhecido",
