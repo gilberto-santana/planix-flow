@@ -1,3 +1,5 @@
+// src/hooks/useFileProcessing.ts
+
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,33 +19,24 @@ interface DatabaseRow {
 }
 
 const convertChartJsToStandardFormat = (chartJsData: any) => {
-  console.log("🔄 Converting Chart.js data to standard format:", chartJsData);
-
   try {
-    if (!chartJsData || !Array.isArray(chartJsData)) {
-      console.error("❌ Invalid chartJsData structure:", chartJsData);
-      return [];
-    }
+    if (!chartJsData || !Array.isArray(chartJsData)) return [];
 
     const convertedCharts = chartJsData.map((chart: any, index: number) => {
       const title = chart.title || `Gráfico ${index + 1}`;
 
       if (chart.data && Array.isArray(chart.data)) {
-        const chartData = chart.data.filter(
-          (item: any) =>
-            item &&
-            typeof item.label === "string" &&
-            typeof item.value === "number"
+        const chartData = chart.data.filter((item: any) =>
+          item &&
+          typeof item.label === "string" &&
+          typeof item.value === "number"
         );
 
-        if (chartData.length === 0) {
-          console.warn("⚠️ No valid data found for chart:", title);
-          return null;
-        }
+        if (chartData.length === 0) return null;
 
         return {
           type: chart.type || "bar",
-          title: title,
+          title,
           data: chartData,
         };
       }
@@ -56,10 +49,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
         !labels.length ||
         !values.length ||
         labels.length !== values.length
-      ) {
-        console.warn("⚠️ Invalid chart structure for:", title);
-        return null;
-      }
+      ) return null;
 
       const standardData = labels
         .map((label: string, idx: number) => {
@@ -69,25 +59,19 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
             value: isNaN(value) ? 0 : Math.abs(value),
           };
         })
-        .filter(
-          (item: any) => item.label && (item.value > 0 || item.value === 0)
-        );
+        .filter((item: any) => item.label && (item.value > 0 || item.value === 0));
 
-      if (standardData.length === 0) {
-        return null;
-      }
+      if (standardData.length === 0) return null;
 
       return {
         type: chart.type || "bar",
-        title: title,
+        title,
         data: standardData,
       };
     }).filter(Boolean);
 
-    console.log("✅ Charts converted successfully:", convertedCharts.length);
     return convertedCharts;
-  } catch (error) {
-    console.error("❌ Error converting Chart.js data:", error);
+  } catch {
     return [];
   }
 };
@@ -98,17 +82,12 @@ export function useFileProcessing() {
   const [loading, setLoading] = useState(false);
   const { charts, fileName, setCharts, setFileName } = useCharts();
 
-  const handleFileUpload = async (
-    file: File,
-    fileId: string,
-    filePath: string
-  ) => {
+  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
     if (!user?.id) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
     }
 
-    console.log("🚀 Starting file upload process for:", file.name);
     setLoading(true);
     setCharts([]);
 
@@ -119,16 +98,12 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType:
-          file.type ||
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       };
 
-      console.log("📤 Calling parse-uploaded-sheet function...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
       if (parseResult.error || !parseResult.data?.success) {
-        console.error("❌ Parse function failed:", parseResult.error);
         toast({
           title: "Erro ao processar planilha",
           description: parseResult.error || "Falha no processamento",
@@ -138,11 +113,10 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ Spreadsheet parsed successfully");
       setFileName(file.name);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((r) => setTimeout(r, 1000));
 
-      const { data: spreadsheets, error: spreadsheetError } = await supabase
+      const { data: spreadsheets } = await supabase
         .from("spreadsheets")
         .select("id")
         .eq("file_name", file.name)
@@ -150,45 +124,38 @@ export function useFileProcessing() {
         .order("created_at", { ascending: false })
         .limit(1);
 
-      if (spreadsheetError || !spreadsheets?.length) {
-        console.error("❌ Failed to find processed spreadsheet:", spreadsheetError);
+      if (!spreadsheets?.length) {
         toast({ title: "Erro ao buscar planilha processada", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const spreadsheetId = spreadsheets[0].id;
-      console.log("📋 Found spreadsheet ID:", spreadsheetId);
 
-      const { data: sheetData, error: sheetError } = await supabase
+      const { data: sheetData } = await supabase
         .from("sheets")
         .select("id")
         .eq("spreadsheet_id", spreadsheetId)
         .limit(1);
 
-      if (sheetError || !sheetData?.length) {
-        console.error("❌ No sheets found:", sheetError);
+      if (!sheetData?.length) {
         toast({ title: "Nenhuma aba encontrada na planilha", variant: "destructive" });
         setLoading(false);
         return;
       }
 
       const sheetId = sheetData[0].id;
-      console.log("📄 Found sheet ID:", sheetId);
 
       const { data, error } = await supabase
         .from("spreadsheet_data")
         .select("*")
         .eq("sheet_id", sheetId);
 
-      if (error || !data || data.length === 0) {
-        console.error("❌ No spreadsheet data found:", error);
-        toast({ title: "Nenhum dado encontrado após o upload.", variant: "destructive" });
+      if (error || !data?.length) {
+        toast({ title: "Nenhum dado encontrado após o upload", variant: "destructive" });
         setLoading(false);
         return;
       }
-
-      console.log("📊 Found spreadsheet data:", data.length, "rows");
 
       const rows = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
@@ -197,9 +164,6 @@ export function useFileProcessing() {
         value: row.cell_value,
       }));
 
-      console.log("🤖 Calling AI function with", rows.length, "data points");
-      console.log("🎯 IMPORTANTE: Chamando função generate-ai-charts com IA Gemini!");
-
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: JSON.stringify({ data: rows }),
         headers: {
@@ -207,10 +171,7 @@ export function useFileProcessing() {
         },
       });
 
-      console.log("📋 AI Result:", aiResult);
-
       if (aiResult.error) {
-        console.error("❌ AI function error:", aiResult.error);
         toast({
           title: "Erro ao gerar gráficos com IA",
           description: aiResult.error.message,
@@ -220,36 +181,18 @@ export function useFileProcessing() {
         return;
       }
 
-      if (!aiResult.data?.chartConfig) {
-        console.warn("⚠️ No chartConfig in AI response");
+      if (!aiResult.data?.chartConfig || aiResult.data.chartConfig.length === 0) {
         toast({
-          title: "Resposta inválida da IA",
+          title: "Nenhum gráfico gerado",
           description: "A IA não retornou dados de gráficos válidos.",
         });
         setLoading(false);
         return;
       }
 
-      if (aiResult.data.chartConfig.length === 0) {
-        console.log("⚠️ AI generated no charts");
-        toast({
-          title: "Nenhum gráfico gerado",
-          description: "A IA não conseguiu gerar gráficos para esta planilha.",
-        });
-        setCharts([]);
-        setLoading(false);
-        return;
-      }
-
-      console.log("🎯 CONFIRMADO: Gráficos recebidos da IA Gemini!");
-      console.log("📊 Raw chart config from AI:", aiResult.data.chartConfig);
-
-      const convertedCharts = convertChartJsToStandardFormat(
-        aiResult.data.chartConfig
-      );
+      const convertedCharts = convertChartJsToStandardFormat(aiResult.data.chartConfig);
 
       if (convertedCharts.length === 0) {
-        console.error("❌ Failed to convert charts");
         toast({
           title: "Erro na conversão dos gráficos",
           description: "Não foi possível converter os gráficos para exibição.",
@@ -258,20 +201,16 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ Charts successfully converted and ready for display:", convertedCharts.length);
-      console.log("🎯 FINAL: Gráficos exibidos são 100% gerados pela IA Gemini!");
-
       setCharts(convertedCharts);
       toast({
         title: "Gráficos gerados com sucesso!",
         description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.`,
       });
+
     } catch (err) {
-      console.error("❌ Unexpected error in file processing:", err);
       toast({
         title: "Erro inesperado no upload",
-        description:
-          err instanceof Error ? err.message : "Erro desconhecido",
+        description: err instanceof Error ? err.message : "Erro desconhecido",
         variant: "destructive",
       });
     } finally {
