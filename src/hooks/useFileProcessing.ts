@@ -18,7 +18,7 @@ interface DatabaseRow {
 
 const convertChartJsToStandardFormat = (chartJsData: any) => {
   console.log("🔄 Converting Chart.js data to standard format:", chartJsData);
-  
+
   try {
     if (!chartJsData || !Array.isArray(chartJsData)) {
       console.error("❌ Invalid chartJsData structure:", chartJsData);
@@ -27,11 +27,13 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
 
     const convertedCharts = chartJsData.map((chart: any, index: number) => {
       const title = chart.title || `Gráfico ${index + 1}`;
-      
-      // Handle the new format from the improved Edge Function
+
       if (chart.data && Array.isArray(chart.data)) {
-        const chartData = chart.data.filter((item: any) => 
-          item && typeof item.label === 'string' && typeof item.value === 'number'
+        const chartData = chart.data.filter(
+          (item: any) =>
+            item &&
+            typeof item.label === "string" &&
+            typeof item.value === "number"
         );
 
         if (chartData.length === 0) {
@@ -40,38 +42,45 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
         }
 
         return {
-          type: chart.type || 'bar',
+          type: chart.type || "bar",
           title: title,
-          data: chartData
+          data: chartData,
         };
       }
 
-      // Fallback for old format (Chart.js format)
       const labels = chart.data?.labels || [];
       const dataset = chart.data?.datasets?.[0];
       const values = dataset?.data || [];
 
-      if (!labels.length || !values.length || labels.length !== values.length) {
+      if (
+        !labels.length ||
+        !values.length ||
+        labels.length !== values.length
+      ) {
         console.warn("⚠️ Invalid chart structure for:", title);
         return null;
       }
 
-      const standardData = labels.map((label: string, idx: number) => {
-        const value = Number(values[idx]);
-        return {
-          label: String(label || `Item ${idx + 1}`),
-          value: isNaN(value) ? 0 : Math.abs(value)
-        };
-      }).filter((item: any) => item.label && (item.value > 0 || item.value === 0));
+      const standardData = labels
+        .map((label: string, idx: number) => {
+          const value = Number(values[idx]);
+          return {
+            label: String(label || `Item ${idx + 1}`),
+            value: isNaN(value) ? 0 : Math.abs(value),
+          };
+        })
+        .filter(
+          (item: any) => item.label && (item.value > 0 || item.value === 0)
+        );
 
       if (standardData.length === 0) {
         return null;
       }
 
       return {
-        type: chart.type || 'bar',
+        type: chart.type || "bar",
         title: title,
-        data: standardData
+        data: standardData,
       };
     }).filter(Boolean);
 
@@ -89,7 +98,11 @@ export function useFileProcessing() {
   const [loading, setLoading] = useState(false);
   const { charts, fileName, setCharts, setFileName } = useCharts();
 
-  const handleFileUpload = async (file: File, fileId: string, filePath: string) => {
+  const handleFileUpload = async (
+    file: File,
+    fileId: string,
+    filePath: string
+  ) => {
     if (!user?.id) {
       toast({ title: "Usuário não autenticado", variant: "destructive" });
       return;
@@ -106,7 +119,9 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        fileType:
+          file.type ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
       console.log("📤 Calling parse-uploaded-sheet function...");
@@ -114,10 +129,10 @@ export function useFileProcessing() {
 
       if (parseResult.error || !parseResult.data?.success) {
         console.error("❌ Parse function failed:", parseResult.error);
-        toast({ 
-          title: "Erro ao processar planilha", 
+        toast({
+          title: "Erro ao processar planilha",
           description: parseResult.error || "Falha no processamento",
-          variant: "destructive" 
+          variant: "destructive",
         });
         setLoading(false);
         return;
@@ -125,7 +140,7 @@ export function useFileProcessing() {
 
       console.log("✅ Spreadsheet parsed successfully");
       setFileName(file.name);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
@@ -188,18 +203,18 @@ export function useFileProcessing() {
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: JSON.stringify({ data: rows }),
         headers: {
-          'Content-Type': 'application/json'
-        }
+          "Content-Type": "application/json",
+        },
       });
 
       console.log("📋 AI Result:", aiResult);
 
       if (aiResult.error) {
         console.error("❌ AI function error:", aiResult.error);
-        toast({ 
-          title: "Erro ao gerar gráficos com IA", 
+        toast({
+          title: "Erro ao gerar gráficos com IA",
           description: aiResult.error.message,
-          variant: "destructive" 
+          variant: "destructive",
         });
         setLoading(false);
         return;
@@ -207,9 +222,9 @@ export function useFileProcessing() {
 
       if (!aiResult.data?.chartConfig) {
         console.warn("⚠️ No chartConfig in AI response");
-        toast({ 
-          title: "Resposta inválida da IA", 
-          description: "A IA não retornou dados de gráficos válidos." 
+        toast({
+          title: "Resposta inválida da IA",
+          description: "A IA não retornou dados de gráficos válidos.",
         });
         setLoading(false);
         return;
@@ -217,9 +232,9 @@ export function useFileProcessing() {
 
       if (aiResult.data.chartConfig.length === 0) {
         console.log("⚠️ AI generated no charts");
-        toast({ 
-          title: "Nenhum gráfico gerado", 
-          description: "A IA não conseguiu gerar gráficos para esta planilha." 
+        toast({
+          title: "Nenhum gráfico gerado",
+          description: "A IA não conseguiu gerar gráficos para esta planilha.",
         });
         setCharts([]);
         setLoading(false);
@@ -229,13 +244,15 @@ export function useFileProcessing() {
       console.log("🎯 CONFIRMADO: Gráficos recebidos da IA Gemini!");
       console.log("📊 Raw chart config from AI:", aiResult.data.chartConfig);
 
-      const convertedCharts = convertChartJsToStandardFormat(aiResult.data.chartConfig);
+      const convertedCharts = convertChartJsToStandardFormat(
+        aiResult.data.chartConfig
+      );
 
       if (convertedCharts.length === 0) {
         console.error("❌ Failed to convert charts");
-        toast({ 
-          title: "Erro na conversão dos gráficos", 
-          description: "Não foi possível converter os gráficos para exibição." 
+        toast({
+          title: "Erro na conversão dos gráficos",
+          description: "Não foi possível converter os gráficos para exibição.",
         });
         setLoading(false);
         return;
@@ -245,17 +262,17 @@ export function useFileProcessing() {
       console.log("🎯 FINAL: Gráficos exibidos são 100% gerados pela IA Gemini!");
 
       setCharts(convertedCharts);
-      toast({ 
-        title: "Gráficos gerados com sucesso!", 
-        description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.` 
+      toast({
+        title: "Gráficos gerados com sucesso!",
+        description: `${convertedCharts.length} gráfico(s) criado(s) pela IA.`,
       });
-
     } catch (err) {
       console.error("❌ Unexpected error in file processing:", err);
-      toast({ 
-        title: "Erro inesperado no upload", 
-        description: err instanceof Error ? err.message : "Erro desconhecido",
-        variant: "destructive" 
+      toast({
+        title: "Erro inesperado no upload",
+        description:
+          err instanceof Error ? err.message : "Erro desconhecido",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
