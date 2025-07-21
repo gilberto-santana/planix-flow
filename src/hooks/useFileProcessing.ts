@@ -179,7 +179,6 @@ export function useFileProcessing() {
         sampleData: rows.slice(0, 3)
       });
 
-      // Prepare data payload with proper structure
       const payload = {
         data: rows,
         metadata: {
@@ -196,7 +195,7 @@ export function useFileProcessing() {
       });
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: payload,
+        body: JSON.stringify(payload),
         headers: {
           "Content-Type": "application/json",
         },
@@ -243,11 +242,11 @@ export function useFileProcessing() {
 
       console.log("✅ [SUCCESS] Gráficos convertidos:", convertedCharts.length);
       setCharts(convertedCharts);
-      
+
       const sourceMsg = aiResult.data.source === 'fallback' 
         ? " (dados de exemplo)" 
         : " pela IA";
-        
+
       toast({
         title: "Gráficos gerados com sucesso!",
         description: `${convertedCharts.length} gráfico(s) criado(s)${sourceMsg}.`,
