@@ -1,3 +1,4 @@
+
 // src/components/dashboard/GraficosGerados.tsx
 
 import { useFileProcessing } from "@/hooks/useFileProcessing";
