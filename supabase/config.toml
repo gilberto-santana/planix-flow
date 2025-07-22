@@ -14,10 +14,17 @@ shadow_port = 54320
 [studio]
 enabled = true
 port = 54323
+api_url = "https://planix-flow.lovable.app"
 
 [inbucket]
 enabled = true
 port = 54324
+smtp_port = 54325
+pop3_port = 54326
+
+[edge_runtime]
+enabled = true
+inspector_port = 8083
 
 [storage]
 enabled = true
@@ -25,8 +32,8 @@ file_size_limit = "10MiB"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://lovable.dev"]
+site_url = "https://planix-flow.lovable.app"
+additional_redirect_urls = ["https://lovable.dev", "https://planix-flow.lovable.app"]
 jwt_expiry = 3600
 enable_signup = true
 
