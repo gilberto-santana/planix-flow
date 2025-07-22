@@ -74,9 +74,6 @@ serve(async (req) => {
   }
 
   try {
-    let requestData;
-    const contentType = req.headers.get("content-type") || "";
-
     const body = await req.text();
     if (!body.trim()) {
       return new Response(JSON.stringify({
@@ -89,6 +86,7 @@ serve(async (req) => {
       });
     }
 
+    let requestData;
     try {
       requestData = JSON.parse(body);
     } catch (parseError) {
@@ -102,7 +100,7 @@ serve(async (req) => {
       });
     }
 
-    let data = requestData.data || requestData;
+    const data = requestData.data || requestData;
     if (!data || !Array.isArray(data) || data.length === 0) {
       return new Response(JSON.stringify({
         error: "Dados inválidos",
@@ -116,30 +114,33 @@ serve(async (req) => {
 
     if (geminiApiKey) {
       const prompt = `
-You are a chart generation assistant. You receive a dataset extracted from a spreadsheet. Your goal is to analyze the data and automatically generate up to 10 relevant charts based on the structure and content of the data.
+Você é uma IA que analisa planilhas enviadas por usuários e gera sugestões de gráficos interativos para visualização de dados. 
+A planilha pode conter qualquer tipo de informação: vendas, clientes, produtos, controle de estoque, etc. 
+Seu trabalho é:
 
-The data is dynamic and may represent any type of content: product lists, inventory, customer records, financial tables, marketing metrics, or others.
+1. Detectar automaticamente os tipos de dados em cada coluna (datas, textos, números, categorias).
+2. Identificar colunas que podem ser usadas como "dimensões" (ex: datas, categorias, nomes) e "métricas" (ex: valores numéricos, quantidades).
+3. Gerar até 10 sugestões de gráficos úteis para análise e tomada de decisão, usando combinações relevantes de dimensão + métrica.
+4. Escolher o tipo de gráfico mais adequado: barras, pizza, linhas, colunas, etc.
+5. Evitar gráficos redundantes (ex: não repetir a mesma métrica em todas as combinações possíveis).
+6. Gerar apenas gráficos que façam sentido e tragam valor para quem está analisando a planilha.
 
-Your task:
-- Automatically detect the type of columns (e.g., category, numeric, date, ID, etc.).
-- Select the most meaningful combinations of fields to generate insightful visualizations.
-- Choose the best chart type for each case: use pie charts for proportion comparison, bar/column charts for categorical metrics, and line charts for trends over time.
-- Avoid generating charts based on ID-like or low-variation fields.
-- Do not assume any specific subject like sales or customers — always adapt based on the actual data received.
-- Prefer clarity, usefulness, and uniqueness over quantity.
-
-Output format:
+Formato de saída:
 [
   {
-    "type": "bar" | "line" | "pie",
-    "title": "string",
-    "data": [{ "label": "string", "value": number }]
+    "title": "Título claro e útil do gráfico",
+    "description": "Breve explicação do que o gráfico mostra",
+    "xAxis": "Nome da coluna usada no eixo X",
+    "yAxis": "Nome da coluna usada no eixo Y (ou métrica)",
+    "type": "bar" | "line" | "pie" | "column"
   }
 ]
 
-Data sample:
+IMPORTANTE: Não assuma o conteúdo da planilha. Sempre analise os dados e gere sugestões que façam sentido de forma geral, sem depender do contexto específico.
+
+Dados:
 ${JSON.stringify(data.slice(0, 50), null, 2)}
-      `.trim();
+      `;
 
       try {
         const geminiResponse = await fetch(
@@ -147,9 +148,7 @@ ${JSON.stringify(data.slice(0, 50), null, 2)}
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }]
-            })
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
           }
         );
 
@@ -169,14 +168,10 @@ ${JSON.stringify(data.slice(0, 50), null, 2)}
                   headers: { ...corsHeaders, "Content-Type": "application/json" }
                 });
               }
-            } catch (aiParseError) {
-              console.warn("⚠️ [GEMINI] Erro ao parsear resposta da IA:", aiParseError);
-            }
+            } catch (_) {}
           }
         }
-      } catch (geminiError) {
-        console.warn("⚠️ [GEMINI] Erro na API:", geminiError);
-      }
+      } catch (_) {}
     }
 
     const fallbackCharts = generateFallbackCharts(data);
