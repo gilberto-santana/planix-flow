@@ -7,23 +7,31 @@ schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
-[functions.generate-ai-charts]
-verify_jwt = false
-
-[functions.parse-uploaded-sheet]
-verify_jwt = false
+[db]
+port = 54322
+shadow_port = 54320
 
 [studio]
 enabled = true
 port = 54323
-api_url = "http://127.0.0.1:54321"
 
 [inbucket]
 enabled = true
 port = 54324
-smtp_port = 54325
-pop3_port = 54326
 
-[edge_runtime]
+[storage]
 enabled = true
-inspector_port = 8083
+file_size_limit = "10MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://lovable.dev"]
+jwt_expiry = 3600
+enable_signup = true
+
+[functions.parse-uploaded-sheet]
+verify_jwt = false
+
+[functions.generate-ai-charts]
+verify_jwt = false
