@@ -106,15 +106,25 @@ export function useFileProcessing() {
       console.log("📤 [UPLOAD] Chamando função de parse...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
-      if (parseResult.error || !parseResult.data?.success) {
-        const errorMessage =
-          parseResult.data?.message ||
-          parseResult.error ||
-          "Falha no processamento";
+      console.log("📋 [UPLOAD] Resultado do parse:", parseResult);
 
-        console.error("❌ [UPLOAD] Erro no parse:", errorMessage);
+      // Verificar se o parse foi bem-sucedido
+      if (parseResult.error) {
+        console.error("❌ [UPLOAD] Erro na Edge Function:", parseResult.error);
         toast({
           title: "Erro ao processar planilha",
+          description: parseResult.error,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!parseResult.data || parseResult.data.success !== true) {
+        const errorMessage = parseResult.data?.message || "Falha no processamento da planilha";
+        console.error("❌ [UPLOAD] Parse não foi bem-sucedido:", parseResult.data);
+        toast({
+          title: "Erro ao processar planilha", 
           description: errorMessage,
           variant: "destructive",
         });
