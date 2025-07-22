@@ -106,7 +106,10 @@ export function useFileProcessing() {
       console.log("📤 [UPLOAD] Chamando função de parse...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
-      console.log("📋 [UPLOAD] Resultado do parse:", parseResult);
+      console.log("🔍 [DEBUG] Parse result estrutura completa:", JSON.stringify(parseResult, null, 2));
+      console.log("🔍 [DEBUG] parseResult.error:", parseResult.error);
+      console.log("🔍 [DEBUG] parseResult.data:", parseResult.data);
+      console.log("🔍 [DEBUG] parseResult.data?.success:", parseResult.data?.success);
 
       // Verificar se o parse foi bem-sucedido
       if (parseResult.error) {

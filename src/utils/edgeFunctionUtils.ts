@@ -31,9 +31,16 @@ export async function callParseUploadedSheetFunction(
   console.log("📦 Payload para Edge Function:", payload);
 
   try {
+    console.log("🔍 [EDGE-UTILS] Iniciando chamada para parse-uploaded-sheet...");
     const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
-      body: JSON.stringify(payload) // CORRIGIDO AQUI
+      body: JSON.stringify(payload)
     });
+
+    console.log("🔍 [EDGE-UTILS] Resposta bruta da edge function:");
+    console.log("🔍 [EDGE-UTILS] data:", data);
+    console.log("🔍 [EDGE-UTILS] error:", error);
+    console.log("🔍 [EDGE-UTILS] typeof data:", typeof data);
+    console.log("🔍 [EDGE-UTILS] JSON.stringify(data):", JSON.stringify(data));
 
     if (error) {
       console.error("❌ Erro na Edge Function:", error);
