@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,6 +24,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
     const convertedCharts = chartJsData.map((chart: any, index: number) => {
       const title = chart.title || `Gráfico ${index + 1}`;
 
+      // Novo formato padrão
       if (chart.data && Array.isArray(chart.data)) {
         const chartData = chart.data.filter(
           (item: any) =>
@@ -38,6 +40,7 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
         };
       }
 
+      // Formato Chart.js legacy
       const labels = chart.data?.labels || [];
       const dataset = chart.data?.datasets?.[0];
       const values = dataset?.data || [];
@@ -110,8 +113,10 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("✅ [UPLOAD] Parse concluído, aguardando processamento...");
+      console.log("✅ [UPLOAD] Parse concluído");
       setFileName(file.name);
+      
+      // Aguardar processamento
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       console.log("🔍 [UPLOAD] Buscando planilha processada...");
@@ -166,34 +171,24 @@ export function useFileProcessing() {
 
       console.log("📊 [UPLOAD] Dados encontrados:", data.length, "registros");
 
+      // Preparar dados simplificados para a IA
       const rows = data.map((row: DatabaseRow) => ({
         row_index: row.row_index,
         column_index: row.column_index,
         column_name: row.column_name,
         value: row.cell_value,
+        data_type: row.data_type
       }));
 
-      console.log("🤖 [AI] Preparando dados para IA...");
-      console.log("📋 [AI] Amostra dos dados:", {
+      console.log("🤖 [AI] Enviando dados para IA...", {
         totalRows: rows.length,
         sampleData: rows.slice(0, 3)
       });
 
-      const payload = {
-        data: rows,
-        metadata: {
-          fileName: file.name,
-          totalRows: rows.length,
-          timestamp: new Date().toISOString()
-        }
-      };
+      // Payload simplificado - apenas dados essenciais
+      const payload = { data: rows };
 
-      console.log("🤖 [AI] Enviando para função generate-ai-charts...");
-      console.log("📦 [AI] Payload preparado:", {
-        dataLength: payload.data.length,
-        hasMetadata: !!payload.metadata
-      });
-
+      console.log("🚀 [AI] Chamando generate-ai-charts...");
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
         body: JSON.stringify(payload),
         headers: {
@@ -201,13 +196,17 @@ export function useFileProcessing() {
         },
       });
 
-      console.log("📋 [AI] Resposta recebida:", aiResult);
+      console.log("📋 [AI] Resposta recebida:", {
+        hasError: !!aiResult.error,
+        hasData: !!aiResult.data,
+        hasChartConfig: !!aiResult.data?.chartConfig
+      });
 
       if (aiResult.error) {
         console.error("❌ [AI] Erro na função:", aiResult.error);
         toast({
           title: "Erro ao gerar gráficos com IA",
-          description: aiResult.error.message,
+          description: aiResult.error.message || "Erro desconhecido",
           variant: "destructive",
         });
         setLoading(false);
@@ -244,7 +243,7 @@ export function useFileProcessing() {
       setCharts(convertedCharts);
 
       const sourceMsg = aiResult.data.source === 'fallback' 
-        ? " (dados de exemplo)" 
+        ? " (gerados automaticamente)" 
         : " pela IA";
 
       toast({
