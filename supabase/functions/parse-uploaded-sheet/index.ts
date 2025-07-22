@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.3';
@@ -33,6 +32,18 @@ serve(async (req) => {
       );
     }
 
+    // Bloquear arquivos Excel por enquanto
+    if (fileType.includes('excel') || fileName.endsWith('.xlsx')) {
+      console.error('❌ Excel parsing not implemented');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Arquivos .xlsx ainda não são suportados. Converta para CSV.',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
     // Download the file from storage
     console.log('📥 Downloading file from:', fileUrl);
     const fileResponse = await fetch(fileUrl);
@@ -48,51 +59,31 @@ serve(async (req) => {
     const fileBuffer = await fileResponse.arrayBuffer();
     console.log('✅ File downloaded, size:', fileBuffer.byteLength);
 
-    // For now, we'll create a simple parser that works with basic CSV/Excel data
-    // In a real implementation, you'd use a library like SheetJS to parse Excel files
-    let parsedData: any[] = [];
+    // Parse CSV
+    const textData = new TextDecoder().decode(fileBuffer);
+    const lines = textData.split('\n').filter(line => line.trim());
+    const headers = lines[0]?.split(',').map(h => h.trim()) || [];
     
-    if (fileType.includes('csv') || fileName.endsWith('.csv')) {
-      // Parse CSV
-      const textData = new TextDecoder().decode(fileBuffer);
-      const lines = textData.split('\n').filter(line => line.trim());
-      const headers = lines[0]?.split(',').map(h => h.trim()) || [];
-      
-      parsedData = lines.slice(1).map((line, rowIndex) => {
-        const values = line.split(',').map(v => v.trim());
-        return headers.map((header, colIndex) => ({
-          row_index: rowIndex + 1,
-          column_index: colIndex,
-          column_name: header,
-          cell_value: values[colIndex] || '',
-          data_type: 'string'
-        }));
-      }).flat();
-    } else {
-      // For Excel files, create sample data for now
-      // In production, you'd use a proper Excel parser
-      console.log('📊 Creating sample data for Excel file');
-      const sampleHeaders = ['Produto', 'Vendas', 'Região', 'Mês'];
-      const sampleRows = [
-        ['Produto A', '100', 'Norte', 'Janeiro'],
-        ['Produto B', '150', 'Sul', 'Janeiro'],
-        ['Produto C', '200', 'Leste', 'Fevereiro'],
-        ['Produto A', '120', 'Oeste', 'Fevereiro'],
-        ['Produto B', '180', 'Norte', 'Março']
-      ];
-
-      parsedData = sampleRows.map((row, rowIndex) => {
-        return sampleHeaders.map((header, colIndex) => ({
-          row_index: rowIndex + 1,
-          column_index: colIndex,
-          column_name: header,
-          cell_value: row[colIndex] || '',
-          data_type: colIndex === 1 ? 'number' : 'string' // Vendas column is number
-        }));
-      }).flat();
-    }
+    const parsedData = lines.slice(1).map((line, rowIndex) => {
+      const values = line.split(',').map(v => v.trim());
+      return headers.map((header, colIndex) => ({
+        row_index: rowIndex + 1,
+        column_index: colIndex,
+        column_name: header,
+        cell_value: values[colIndex] || '',
+        data_type: 'string'
+      }));
+    }).flat();
 
     console.log('📊 Parsed data points:', parsedData.length);
+
+    if (parsedData.length === 0) {
+      console.error('❌ CSV vazio ou mal formatado');
+      return new Response(
+        JSON.stringify({ success: false, message: 'Nenhum dado encontrado na planilha' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
 
     // Create spreadsheet record
     const { data: spreadsheet, error: spreadsheetError } = await supabase
