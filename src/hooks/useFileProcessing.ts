@@ -20,48 +20,51 @@ const convertChartJsToStandardFormat = (chartJsData: any) => {
   try {
     if (!chartJsData || !Array.isArray(chartJsData)) return [];
 
-    const convertedCharts = chartJsData.map((chart: any, index: number) => {
-      const title = chart.title || `Gráfico ${index + 1}`;
+    const convertedCharts = chartJsData
+      .map((chart: any, index: number) => {
+        const title = chart.title || `Gráfico ${index + 1}`;
 
-      if (chart.data && Array.isArray(chart.data)) {
-        const chartData = chart.data.filter(
-          (item: any) =>
-            item && typeof item.label === "string" && typeof item.value === "number"
-        );
+        if (chart.data && Array.isArray(chart.data)) {
+          const chartData = chart.data.filter(
+            (item: any) =>
+              item && typeof item.label === "string" && typeof item.value === "number"
+          );
 
-        if (chartData.length === 0) return null;
+          if (chartData.length === 0) return null;
+
+          return {
+            type: chart.type || "bar",
+            title,
+            data: chartData,
+          };
+        }
+
+        const labels = chart.data?.labels || [];
+        const dataset = chart.data?.datasets?.[0];
+        const values = dataset?.data || [];
+
+        if (!labels.length || !values.length || labels.length !== values.length)
+          return null;
+
+        const standardData = labels
+          .map((label: string, idx: number) => {
+            const value = Number(values[idx]);
+            return {
+              label: String(label || `Item ${idx + 1}`),
+              value: isNaN(value) ? 0 : Math.abs(value),
+            };
+          })
+          .filter((item: any) => item.label && item.value >= 0);
+
+        if (standardData.length === 0) return null;
 
         return {
           type: chart.type || "bar",
           title,
-          data: chartData,
+          data: standardData,
         };
-      }
-
-      const labels = chart.data?.labels || [];
-      const dataset = chart.data?.datasets?.[0];
-      const values = dataset?.data || [];
-
-      if (!labels.length || !values.length || labels.length !== values.length) return null;
-
-      const standardData = labels
-        .map((label: string, idx: number) => {
-          const value = Number(values[idx]);
-          return {
-            label: String(label || `Item ${idx + 1}`),
-            value: isNaN(value) ? 0 : Math.abs(value),
-          };
-        })
-        .filter((item: any) => item.label && (item.value >= 0));
-
-      if (standardData.length === 0) return null;
-
-      return {
-        type: chart.type || "bar",
-        title,
-        data: standardData,
-      };
-    }).filter(Boolean);
+      })
+      .filter(Boolean);
 
     return convertedCharts;
   } catch (error) {
@@ -93,7 +96,9 @@ export function useFileProcessing() {
         filePath,
         fileName: file.name,
         fileSize: file.size,
-        fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        fileType:
+          file.type ||
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
       console.log("📤 [UPLOAD] Chamando função de parse...");
@@ -118,9 +123,7 @@ export function useFileProcessing() {
 
       console.log("✅ [UPLOAD] Parse concluído, aguardando processamento...");
       setFileName(file.name);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      console.log("🔍 [UPLOAD] Buscando planilha processada...");
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
@@ -155,13 +158,31 @@ export function useFileProcessing() {
       const sheetId = sheetData[0].id;
       console.log("📊 [UPLOAD] Aba encontrada:", sheetId);
 
-      const { data, error } = await supabase
-        .from("spreadsheet_data")
-        .select("*")
-        .eq("sheet_id", sheetId);
+      let rows = [];
+      let attempts = 0;
 
-      if (error || !data || data.length === 0) {
-        console.error("❌ [UPLOAD] Erro ao buscar dados:", error);
+      while (attempts < 5) {
+        const { data, error } = await supabase
+          .from("spreadsheet_data")
+          .select("*")
+          .eq("sheet_id", sheetId);
+
+        if (data?.length) {
+          rows = data.map((row: DatabaseRow) => ({
+            row_index: row.row_index,
+            column_index: row.column_index,
+            column_name: row.column_name,
+            value: row.cell_value,
+          }));
+          break;
+        }
+
+        attempts++;
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      if (rows.length === 0) {
+        console.error("❌ [UPLOAD] Nenhum dado encontrado após 5 tentativas.");
         toast({
           title: "Nenhum dado encontrado após o upload.",
           variant: "destructive",
@@ -170,34 +191,21 @@ export function useFileProcessing() {
         return;
       }
 
-      console.log("📊 [UPLOAD] Dados encontrados:", data.length, "registros");
-
-      const rows = data.map((row: DatabaseRow) => ({
-        row_index: row.row_index,
-        column_index: row.column_index,
-        column_name: row.column_name,
-        value: row.cell_value,
-      }));
-
-      console.log("🤖 [AI] Preparando dados para IA...");
-      console.log("📋 [AI] Amostra dos dados:", {
-        totalRows: rows.length,
-        sampleData: rows.slice(0, 3)
-      });
+      console.log("📊 [UPLOAD] Dados encontrados:", rows.length);
 
       const payload = {
         data: rows,
         metadata: {
           fileName: file.name,
           totalRows: rows.length,
-          timestamp: new Date().toISOString()
-        }
+          timestamp: new Date().toISOString(),
+        },
       };
 
       console.log("🤖 [AI] Enviando para função generate-ai-charts...");
       console.log("📦 [AI] Payload preparado:", {
         dataLength: payload.data.length,
-        hasMetadata: !!payload.metadata
+        hasMetadata: !!payload.metadata,
       });
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
@@ -249,15 +257,13 @@ export function useFileProcessing() {
       console.log("✅ [SUCCESS] Gráficos convertidos:", convertedCharts.length);
       setCharts(convertedCharts);
 
-      const sourceMsg = aiResult.data.source === 'fallback' 
-        ? " (dados de exemplo)" 
-        : " pela IA";
+      const sourceMsg =
+        aiResult.data.source === "fallback" ? " (dados de exemplo)" : " pela IA";
 
       toast({
         title: "Gráficos gerados com sucesso!",
         description: `${convertedCharts.length} gráfico(s) criado(s)${sourceMsg}.`,
       });
-
     } catch (err) {
       console.error("❌ [UPLOAD] Erro inesperado:", err);
       toast({
