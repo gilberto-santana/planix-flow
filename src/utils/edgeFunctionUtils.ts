@@ -23,6 +23,7 @@ export async function callParseUploadedSheetFunction(
     fileUrl: `https://lferxmdlttvitbuvekps.supabase.co/storage/v1/object/public/spreadsheets/${params.filePath}`,
     userId: params.userId,
     fileName: params.fileName,
+    filePath: params.filePath,
     fileSize: params.fileSize,
     fileType: params.fileType
   };

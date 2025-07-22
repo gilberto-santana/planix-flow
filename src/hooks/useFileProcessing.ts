@@ -109,7 +109,6 @@ export function useFileProcessing() {
       if (parseResult.error || !parseResult.data?.success) {
         const errorMessage =
           parseResult.data?.message ||
-          parseResult.error?.message ||
           parseResult.error ||
           "Falha no processamento";
 
