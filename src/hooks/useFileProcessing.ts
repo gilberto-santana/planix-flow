@@ -1,3 +1,5 @@
+// src/hooks/useFileProcessing.ts
+
 import { useState } from "react";
 import { useAuth } from "./useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -202,14 +204,27 @@ export function useFileProcessing() {
         },
       };
 
+      const jsonPayload = JSON.stringify(payload);
+
+      if (!jsonPayload || jsonPayload.length < 10) {
+        console.error("❌ [AI] Payload inválido ou muito pequeno. Abortando chamada.");
+        toast({
+          title: "Erro ao preparar os dados para IA",
+          description: "Payload inválido ou muito pequeno",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       console.log("🤖 [AI] Enviando para função generate-ai-charts...");
-      console.log("📦 [AI] Payload preparado:", {
-        dataLength: payload.data.length,
-        hasMetadata: !!payload.metadata,
+      console.log("📦 [AI] Payload:", {
+        length: jsonPayload.length,
+        preview: jsonPayload.slice(0, 150) + "...",
       });
 
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify(payload),
+        body: jsonPayload,
         headers: {
           "Content-Type": "application/json",
         },
