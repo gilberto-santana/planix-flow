@@ -114,33 +114,40 @@ serve(async (req) => {
 
     if (geminiApiKey) {
       const prompt = `
-Você é uma IA que analisa planilhas enviadas por usuários e gera sugestões de gráficos interativos para visualização de dados. 
-A planilha pode conter qualquer tipo de informação: vendas, clientes, produtos, controle de estoque, etc. 
-Seu trabalho é:
+You are a data visualization assistant.
 
-1. Detectar automaticamente os tipos de dados em cada coluna (datas, textos, números, categorias).
-2. Identificar colunas que podem ser usadas como "dimensões" (ex: datas, categorias, nomes) e "métricas" (ex: valores numéricos, quantidades).
-3. Gerar até 10 sugestões de gráficos úteis para análise e tomada de decisão, usando combinações relevantes de dimensão + métrica.
-4. Escolher o tipo de gráfico mais adequado: barras, pizza, linhas, colunas, etc.
-5. Evitar gráficos redundantes (ex: não repetir a mesma métrica em todas as combinações possíveis).
-6. Gerar apenas gráficos que façam sentido e tragam valor para quem está analisando a planilha.
+Your task is to analyze the spreadsheet data provided and generate up to 10 insightful and useful charts. These charts should help a user understand patterns, comparisons, or trends in their data.
 
-Formato de saída:
+The spreadsheet content can vary — it might be customer lists, sales reports, inventories, or any generic data. You must analyze the actual content, without assuming context.
+
+Guidelines:
+- Automatically detect the structure and meaning of each column.
+- Use the best chart type depending on the data (e.g., pie for proportions, line for trends over time, bar/column for comparisons).
+- Avoid using ID-like fields or columns with low variation as labels.
+- Only use numeric values as \`value\`. Skip text-only columns.
+- Each chart must include:
+  - a \`type\`: "bar", "line", or "pie"
+  - a \`title\`: human-readable and meaningful
+  - a \`data\` array: list of { label: string, value: number }
+
+Output format (strictly this JSON structure):
+
 [
   {
-    "title": "Título claro e útil do gráfico",
-    "description": "Breve explicação do que o gráfico mostra",
-    "xAxis": "Nome da coluna usada no eixo X",
-    "yAxis": "Nome da coluna usada no eixo Y (ou métrica)",
-    "type": "bar" | "line" | "pie" | "column"
+    "type": "bar",
+    "title": "Exemplo de gráfico",
+    "data": [
+      { "label": "Item A", "value": 123 },
+      { "label": "Item B", "value": 456 }
+    ]
   }
 ]
 
-IMPORTANTE: Não assuma o conteúdo da planilha. Sempre analise os dados e gere sugestões que façam sentido de forma geral, sem depender do contexto específico.
+Do not return explanations, markdown or commentary. Only JSON. Generate useful charts for understanding the structure and patterns of the data.
 
-Dados:
+Dataset sample:
 ${JSON.stringify(data.slice(0, 50), null, 2)}
-      `;
+`.trim();
 
       try {
         const geminiResponse = await fetch(
@@ -148,7 +155,9 @@ ${JSON.stringify(data.slice(0, 50), null, 2)}
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }]
+            })
           }
         );
 
