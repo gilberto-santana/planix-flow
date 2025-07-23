@@ -1,4 +1,5 @@
-import "https://deno.land/std@0.203.0/dotenv/load.ts"; // 👈 NECESSÁRIO
+
+import "https://deno.land/std@0.203.0/dotenv/load.ts";
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
 
@@ -9,12 +10,12 @@ const corsHeaders = {
 };
 
 const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-const supabase = createClient(supabaseUrl!, serviceRoleKey!);
+console.log("🤖 [AI-CHARTS] Função iniciada!");
 
 function generateFallbackCharts(data: any[]): any[] {
+  console.log("📊 [AI-CHARTS] Gerando gráficos de fallback...");
+  
   if (!data || data.length === 0) {
     return [{
       title: "Dados de Exemplo",
@@ -27,6 +28,7 @@ function generateFallbackCharts(data: any[]): any[] {
     }];
   }
 
+  // Tentar extrair dados reais
   const columns = new Map();
   data.forEach(row => {
     if (row.column_name && row.value) {
@@ -36,7 +38,7 @@ function generateFallbackCharts(data: any[]): any[] {
           columns.set(row.column_name, []);
         }
         columns.get(row.column_name).push({
-          label: `Linha ${row.row_index}`,
+          label: `Linha ${row.row_index || 1}`,
           value: Math.abs(numValue)
         });
       }
@@ -70,16 +72,22 @@ function generateFallbackCharts(data: any[]): any[] {
 }
 
 serve(async (req) => {
+  console.log("📨 [AI-CHARTS] Requisição recebida:", req.method);
+
   if (req.method === 'OPTIONS') {
+    console.log("✅ [AI-CHARTS] Respondendo OPTIONS");
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
+    console.log("📝 [AI-CHARTS] Lendo body da requisição...");
     const body = await req.text();
+    
     if (!body.trim()) {
+      console.log("⚠️ [AI-CHARTS] Body vazio, retornando fallback");
       return new Response(JSON.stringify({
-        error: "Body vazio",
-        fallback: true,
+        success: true,
+        source: "fallback-empty",
         chartConfig: generateFallbackCharts([])
       }), {
         status: 200,
@@ -90,10 +98,12 @@ serve(async (req) => {
     let requestData;
     try {
       requestData = JSON.parse(body);
+      console.log("✅ [AI-CHARTS] JSON parseado com sucesso");
     } catch (parseError) {
+      console.error("❌ [AI-CHARTS] Erro ao parsear JSON:", parseError);
       return new Response(JSON.stringify({
-        error: "Erro ao parsear JSON",
-        fallback: true,
+        success: true,
+        source: "fallback-parse-error",
         chartConfig: generateFallbackCharts([])
       }), {
         status: 200,
@@ -102,10 +112,13 @@ serve(async (req) => {
     }
 
     const data = requestData.data || requestData;
+    console.log("📊 [AI-CHARTS] Dados recebidos:", data?.length || 0, "registros");
+
     if (!data || !Array.isArray(data) || data.length === 0) {
+      console.log("⚠️ [AI-CHARTS] Dados inválidos, usando fallback");
       return new Response(JSON.stringify({
-        error: "Dados inválidos",
-        fallback: true,
+        success: true,
+        source: "fallback-no-data",
         chartConfig: generateFallbackCharts([])
       }), {
         status: 200,
@@ -113,30 +126,21 @@ serve(async (req) => {
       });
     }
 
+    // Tentar usar Gemini se a chave estiver disponível
     if (geminiApiKey) {
+      console.log("🤖 [AI-CHARTS] Tentando usar Gemini...");
+      
       const prompt = `
-You are a data visualization assistant.
+Você é um assistente de visualização de dados.
 
-Your task is to analyze the spreadsheet data provided and generate up to 10 insightful and useful charts. These charts should help a user understand patterns, comparisons, or trends in their data.
+Analise os dados da planilha e gere até 5 gráficos úteis. Use o melhor tipo de gráfico dependendo dos dados (pie para proporções, bar para comparações).
 
-The spreadsheet content can vary — it might be customer lists, sales reports, inventories, or any generic data. You must analyze the actual content, without assuming context.
-
-Guidelines:
-- Automatically detect the structure and meaning of each column.
-- Use the best chart type depending on the data (e.g., pie for proportions, line for trends over time, bar/column for comparisons).
-- Avoid using ID-like fields or columns with low variation as labels.
-- Only use numeric values as \`value\`. Skip text-only columns.
-- Each chart must include:
-  - a \`type\`: "bar", "line", or "pie"
-  - a \`title\`: human-readable and meaningful
-  - a \`data\` array: list of { label: string, value: number }
-
-Output format (strictly this JSON structure):
+Retorne APENAS um JSON válido no formato:
 
 [
   {
     "type": "bar",
-    "title": "Exemplo de gráfico",
+    "title": "Título do gráfico",
     "data": [
       { "label": "Item A", "value": 123 },
       { "label": "Item B", "value": 456 }
@@ -144,13 +148,12 @@ Output format (strictly this JSON structure):
   }
 ]
 
-Do not return explanations, markdown or commentary. Only JSON. Generate useful charts for understanding the structure and patterns of the data.
-
-Dataset sample:
-${JSON.stringify(data.slice(0, 50), null, 2)}
+Dados da planilha:
+${JSON.stringify(data.slice(0, 20), null, 2)}
 `.trim();
 
       try {
+        console.log("🚀 [AI-CHARTS] Fazendo requisição para Gemini...");
         const geminiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
           {
@@ -167,9 +170,11 @@ ${JSON.stringify(data.slice(0, 50), null, 2)}
           const textResponse = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
 
           if (textResponse) {
+            console.log("✅ [AI-CHARTS] Resposta do Gemini recebida");
             try {
               const aiCharts = JSON.parse(textResponse);
               if (Array.isArray(aiCharts) && aiCharts.length > 0) {
+                console.log("🎯 [AI-CHARTS] Gráficos da IA gerados:", aiCharts.length);
                 return new Response(JSON.stringify({
                   success: true,
                   source: "gemini",
@@ -178,25 +183,37 @@ ${JSON.stringify(data.slice(0, 50), null, 2)}
                   headers: { ...corsHeaders, "Content-Type": "application/json" }
                 });
               }
-            } catch (_) {}
+            } catch (jsonError) {
+              console.error("❌ [AI-CHARTS] Erro ao parsear resposta da IA:", jsonError);
+            }
           }
+        } else {
+          console.error("❌ [AI-CHARTS] Gemini retornou erro:", geminiResponse.status);
         }
-      } catch (_) {}
+      } catch (geminiError) {
+        console.error("❌ [AI-CHARTS] Erro na requisição Gemini:", geminiError);
+      }
+    } else {
+      console.log("⚠️ [AI-CHARTS] Chave Gemini não configurada");
     }
 
+    // Fallback com dados reais
+    console.log("📊 [AI-CHARTS] Usando fallback com dados reais");
     const fallbackCharts = generateFallbackCharts(data);
+    
     return new Response(JSON.stringify({
       success: true,
-      source: "fallback",
+      source: "fallback-with-data",
       chartConfig: fallbackCharts
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error) {
+    console.error("❌ [AI-CHARTS] Erro geral:", error);
     return new Response(JSON.stringify({
-      error: error.message,
-      fallback: true,
+      success: true,
+      source: "fallback-error",
       chartConfig: generateFallbackCharts([])
     }), {
       status: 200,

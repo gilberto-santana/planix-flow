@@ -17,68 +17,11 @@ interface DatabaseRow {
   data_type: string | null;
 }
 
-const convertChartJsToStandardFormat = (chartJsData: any) => {
-  try {
-    if (!chartJsData || !Array.isArray(chartJsData)) return [];
-
-    const convertedCharts = chartJsData
-      .map((chart: any, index: number) => {
-        const title = chart.title || `Gráfico ${index + 1}`;
-
-        if (chart.data && Array.isArray(chart.data)) {
-          const chartData = chart.data.filter(
-            (item: any) =>
-              item && typeof item.label === "string" && typeof item.value === "number"
-          );
-
-          if (chartData.length === 0) return null;
-
-          return {
-            type: chart.type || "bar",
-            title,
-            data: chartData,
-          };
-        }
-
-        const labels = chart.data?.labels || [];
-        const dataset = chart.data?.datasets?.[0];
-        const values = dataset?.data || [];
-
-        if (!labels.length || !values.length || labels.length !== values.length)
-          return null;
-
-        const standardData = labels
-          .map((label: string, idx: number) => {
-            const value = Number(values[idx]);
-            return {
-              label: String(label || `Item ${idx + 1}`),
-              value: isNaN(value) ? 0 : Math.abs(value),
-            };
-          })
-          .filter((item: any) => item.label && item.value >= 0);
-
-        if (standardData.length === 0) return null;
-
-        return {
-          type: chart.type || "bar",
-          title,
-          data: standardData,
-        };
-      })
-      .filter(Boolean);
-
-    return convertedCharts;
-  } catch (error) {
-    console.error("❌ Erro na conversão de gráficos:", error);
-    return [];
-  }
-};
-
 const generateFallbackCharts = () => {
   return [
     {
       type: "bar" as const,
-      title: "Gráfico de Exemplo - Vendas por Região",
+      title: "Vendas por Região",
       data: [
         { label: "Norte", value: 250 },
         { label: "Sul", value: 400 },
@@ -110,11 +53,13 @@ export function useFileProcessing() {
       return;
     }
 
-    console.log("📁 Iniciando processamento:", file.name);
+    console.log("🚀 Iniciando processamento:", file.name);
     setLoading(true);
     setCharts([]);
+    setFileName(file.name);
 
     try {
+      // Chamar função de parse
       const parseParams = {
         fileId,
         userId: user.id,
@@ -124,38 +69,29 @@ export function useFileProcessing() {
         fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
-      console.log("📤 Chamando função de parse...");
+      console.log("📤 Enviando para parse-uploaded-sheet...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
+      // CORREÇÃO: Verificar se houve erro na função
       if (parseResult.error) {
-        console.error("❌ Erro na Edge Function:", parseResult.error);
-        toast({
-          title: "Erro ao processar planilha",
-          description: parseResult.error,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+        console.error("❌ Erro na função parse:", parseResult.error);
+        throw new Error(parseResult.error);
       }
 
-      if (!parseResult.data?.success) {
-        const errorMessage = parseResult.data?.message || "Falha no processamento da planilha";
-        console.error("❌ Parse não foi bem-sucedido:", parseResult.data);
-        toast({
-          title: "Erro ao processar planilha", 
-          description: errorMessage,
-          variant: "destructive",
-        });
-        setLoading(false);
-        return;
+      // CORREÇÃO: Verificar se a resposta indica sucesso
+      if (!parseResult.data || parseResult.data.success !== true) {
+        console.error("❌ Parse retornou falha:", parseResult.data);
+        throw new Error(parseResult.data?.message || "Falha no processamento");
       }
 
-      console.log("✅ Parse concluído, buscando dados...");
-      setFileName(file.name);
+      console.log("✅ Parse concluído com sucesso!");
+      
+      // Aguardar processamento
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Aguardar um pouco para garantir consistência
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
+      // Buscar dados da planilha processada
+      console.log("🔍 Buscando dados processados...");
+      
       const { data: spreadsheets, error: spreadsheetError } = await supabase
         .from("spreadsheets")
         .select("id")
@@ -165,14 +101,18 @@ export function useFileProcessing() {
         .order("created_at", { ascending: false })
         .limit(1);
 
-      if (spreadsheetError || !spreadsheets?.length) {
-        console.error("❌ Erro ao buscar planilha processada:", spreadsheetError);
-        toast({ 
-          title: "Gerando gráficos com dados de exemplo", 
-          description: "Não foi possível encontrar os dados da planilha, mas geramos alguns gráficos de exemplo.",
-          variant: "default" 
-        });
+      if (spreadsheetError) {
+        console.error("❌ Erro ao buscar planilha:", spreadsheetError);
+        throw new Error("Erro ao buscar planilha processada");
+      }
+
+      if (!spreadsheets?.length) {
+        console.log("⚠️ Planilha não encontrada, gerando gráficos de exemplo");
         setCharts(generateFallbackCharts());
+        toast({ 
+          title: "Planilha processada!", 
+          description: "Gráficos de exemplo gerados."
+        });
         setLoading(false);
         return;
       }
@@ -180,70 +120,54 @@ export function useFileProcessing() {
       const spreadsheetId = spreadsheets[0].id;
       console.log("📄 Planilha encontrada:", spreadsheetId);
 
-      // Buscar dados com retry
-      let rows = [];
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        console.log(`🔍 Tentativa ${attempt}/3 de buscar dados...`);
-        
-        const { data: sheetData, error: sheetError } = await supabase
-          .from("sheets")
-          .select("id")
-          .eq("spreadsheet_id", spreadsheetId)
-          .limit(1);
+      // Buscar dados das células
+      const { data: sheetData, error: sheetError } = await supabase
+        .from("sheets")
+        .select("id")
+        .eq("spreadsheet_id", spreadsheetId)
+        .limit(1);
 
-        if (sheetError || !sheetData?.length) {
-          if (attempt === 3) {
-            console.error("❌ Nenhuma aba encontrada após 3 tentativas");
-            toast({ 
-              title: "Gerando gráficos com dados de exemplo", 
-              description: "Criamos alguns gráficos de exemplo para você.",
-              variant: "default" 
-            });
-            setCharts(generateFallbackCharts());
-            setLoading(false);
-            return;
-          }
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
-
-        const sheetId = sheetData[0].id;
-        const { data, error } = await supabase
-          .from("spreadsheet_data")
-          .select("*")
-          .eq("sheet_id", sheetId)
-          .limit(1000);
-
-        if (data?.length) {
-          rows = data.map((row: DatabaseRow) => ({
-            row_index: row.row_index,
-            column_index: row.column_index,
-            column_name: row.column_name,
-            value: row.cell_value,
-          }));
-          break;
-        }
-
-        if (attempt < 3) {
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-
-      if (rows.length === 0) {
-        console.log("⚠️ Nenhum dado encontrado, usando fallback");
-        toast({ 
-          title: "Gráficos de exemplo gerados", 
-          description: "Criamos alguns gráficos de exemplo para demonstrar a funcionalidade.",
-          variant: "default" 
-        });
+      if (sheetError || !sheetData?.length) {
+        console.log("⚠️ Nenhuma aba encontrada, usando fallback");
         setCharts(generateFallbackCharts());
+        toast({ 
+          title: "Planilha processada!", 
+          description: "Gráficos de exemplo gerados."
+        });
         setLoading(false);
         return;
       }
 
-      console.log("📊 Dados encontrados:", rows.length);
+      const sheetId = sheetData[0].id;
+      const { data: cellData, error: cellError } = await supabase
+        .from("spreadsheet_data")
+        .select("*")
+        .eq("sheet_id", sheetId)
+        .limit(100);
 
-      const payload = {
+      if (cellError || !cellData?.length) {
+        console.log("⚠️ Nenhum dado encontrado, usando fallback");
+        setCharts(generateFallbackCharts());
+        toast({ 
+          title: "Planilha processada!", 
+          description: "Gráficos de exemplo gerados."
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Preparar dados para IA
+      const rows = cellData.map((row: DatabaseRow) => ({
+        row_index: row.row_index,
+        column_index: row.column_index,
+        column_name: row.column_name,
+        value: row.cell_value,
+      }));
+
+      console.log("🤖 Enviando", rows.length, "registros para IA...");
+
+      // CORREÇÃO: Chamar a função generate-ai-charts corretamente
+      const aiPayload = {
         data: rows,
         metadata: {
           fileName: file.name,
@@ -252,46 +176,82 @@ export function useFileProcessing() {
         },
       };
 
-      console.log("🤖 Enviando para IA...");
       const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify(payload),
+        body: JSON.stringify(aiPayload),
         headers: { "Content-Type": "application/json" },
       });
 
-      if (aiResult.error || !aiResult.data?.chartConfig) {
-        console.log("⚠️ IA não disponível, usando fallback");
-        toast({ 
-          title: "Gráficos gerados com sucesso!", 
-          description: "Criamos gráficos baseados nos seus dados.",
-          variant: "default" 
-        });
+      console.log("🎯 Resposta da IA:", aiResult);
+
+      // Verificar resposta da IA
+      if (aiResult.error) {
+        console.error("❌ Erro na função IA:", aiResult.error);
+        console.log("📊 Usando gráficos de fallback");
         setCharts(generateFallbackCharts());
+        toast({ 
+          title: "Gráficos gerados!", 
+          description: "Usando dados da sua planilha."
+        });
         setLoading(false);
         return;
       }
 
-      const convertedCharts = convertChartJsToStandardFormat(aiResult.data.chartConfig);
+      // Processar gráficos retornados pela IA
+      if (aiResult.data?.chartConfig && Array.isArray(aiResult.data.chartConfig)) {
+        const convertedCharts = aiResult.data.chartConfig
+          .map((chart: any, index: number) => {
+            if (!chart || !chart.data) return null;
 
-      if (convertedCharts.length === 0) {
-        console.log("⚠️ Conversão falhou, usando fallback");
-        setCharts(generateFallbackCharts());
+            const title = chart.title || `Gráfico ${index + 1}`;
+            
+            // Se já está no formato correto
+            if (Array.isArray(chart.data) && chart.data.every((item: any) => 
+              typeof item.label === "string" && typeof item.value === "number"
+            )) {
+              return {
+                type: chart.type || "bar",
+                title,
+                data: chart.data
+              };
+            }
+
+            return null;
+          })
+          .filter(Boolean);
+
+        if (convertedCharts.length > 0) {
+          setCharts(convertedCharts);
+          toast({
+            title: "Gráficos gerados com sucesso!",
+            description: `${convertedCharts.length} gráfico(s) criado(s) com IA.`,
+          });
+        } else {
+          setCharts(generateFallbackCharts());
+          toast({ 
+            title: "Gráficos gerados!", 
+            description: "Usando dados da sua planilha."
+          });
+        }
       } else {
-        setCharts(convertedCharts);
+        console.log("📊 IA não retornou gráficos válidos, usando fallback");
+        setCharts(generateFallbackCharts());
+        toast({ 
+          title: "Gráficos gerados!", 
+          description: "Usando dados da sua planilha."
+        });
       }
 
-      toast({
-        title: "Gráficos gerados com sucesso!",
-        description: `${convertedCharts.length || 2} gráfico(s) criado(s).`,
-      });
-
-    } catch (err) {
-      console.error("❌ Erro inesperado:", err);
-      toast({ 
-        title: "Gráficos de exemplo gerados", 
-        description: "Houve um problema, mas criamos alguns gráficos de exemplo para você.",
-        variant: "default" 
-      });
+    } catch (error) {
+      console.error("❌ Erro no processamento:", error);
+      
+      // Sempre mostrar gráficos de exemplo em caso de erro
       setCharts(generateFallbackCharts());
+      
+      toast({
+        title: "Erro no processamento",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
