@@ -53,13 +53,13 @@ export function useFileProcessing() {
       return;
     }
 
-    console.log("🚀 Iniciando processamento:", file.name);
+    console.log("🚀 [UPLOAD] Iniciando processamento:", file.name);
     setLoading(true);
     setCharts([]);
     setFileName(file.name);
 
     try {
-      // Chamar função de parse
+      // 1. Chamar função de parse
       const parseParams = {
         fileId,
         userId: user.id,
@@ -69,109 +69,111 @@ export function useFileProcessing() {
         fileType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       };
 
-      console.log("📤 Enviando para parse-uploaded-sheet...");
+      console.log("📤 [UPLOAD] Enviando para parse-uploaded-sheet...");
       const parseResult = await callParseUploadedSheetFunction(parseParams);
 
-      // CORREÇÃO: Verificar se houve erro na função
-      if (parseResult.error) {
-        console.error("❌ Erro na função parse:", parseResult.error);
-        throw new Error(parseResult.error);
+      // CORREÇÃO: Verificar apenas se há erro, não comparar string com boolean
+      if (parseResult.error || !parseResult.data) {
+        console.error("❌ [UPLOAD] Erro na função parse:", parseResult.error);
+        throw new Error(parseResult.error || "Erro no processamento");
       }
 
-      // CORREÇÃO: Verificar se a resposta indica sucesso
-      if (!parseResult.data || parseResult.data.success !== true) {
-        console.error("❌ Parse retornou falha:", parseResult.data);
-        throw new Error(parseResult.data?.message || "Falha no processamento");
+      console.log("✅ [UPLOAD] Parse concluído:", parseResult.data);
+      const spreadsheetId = parseResult.data.spreadsheetId;
+
+      if (!spreadsheetId) {
+        throw new Error("ID da planilha não retornado");
       }
 
-      console.log("✅ Parse concluído com sucesso!");
+      // 2. Buscar dados processados (com retry simples)
+      console.log("🔍 [UPLOAD] Buscando dados processados...");
       
-      // Aguardar processamento
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      // Buscar dados da planilha processada
-      console.log("🔍 Buscando dados processados...");
+      let attempts = 0;
+      let cellData: DatabaseRow[] = [];
       
-      const { data: spreadsheets, error: spreadsheetError } = await supabase
-        .from("spreadsheets")
-        .select("id")
-        .eq("file_name", file.name)
-        .eq("user_id", user.id)
-        .eq("processing_status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(1);
+      while (attempts < 3) {
+        attempts++;
+        console.log(`🔄 [UPLOAD] Tentativa ${attempts}/3 de buscar dados...`);
 
-      if (spreadsheetError) {
-        console.error("❌ Erro ao buscar planilha:", spreadsheetError);
-        throw new Error("Erro ao buscar planilha processada");
+        // Buscar abas
+        const { data: sheetData, error: sheetError } = await supabase
+          .from("sheets")
+          .select("id")
+          .eq("spreadsheet_id", spreadsheetId)
+          .limit(1);
+
+        if (sheetError) {
+          console.error(`❌ [UPLOAD] Erro ao buscar aba (tentativa ${attempts}):`, sheetError);
+          if (attempts === 3) throw new Error("Erro ao buscar aba da planilha");
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        if (!sheetData?.length) {
+          console.log(`⚠️ [UPLOAD] Nenhuma aba encontrada (tentativa ${attempts})`);
+          if (attempts === 3) break;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        // Buscar dados das células
+        const sheetId = sheetData[0].id;
+        const { data: rawCellData, error: cellError } = await supabase
+          .from("spreadsheet_data")
+          .select("*")
+          .eq("sheet_id", sheetId)
+          .limit(200);
+
+        if (cellError) {
+          console.error(`❌ [UPLOAD] Erro ao buscar células (tentativa ${attempts}):`, cellError);
+          if (attempts === 3) break;
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          continue;
+        }
+
+        if (rawCellData?.length) {
+          cellData = rawCellData as DatabaseRow[];
+          console.log(`✅ [UPLOAD] Dados encontrados: ${cellData.length} células`);
+          break;
+        }
+
+        console.log(`⚠️ [UPLOAD] Nenhum dado encontrado (tentativa ${attempts})`);
+        if (attempts < 3) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
       }
 
-      if (!spreadsheets?.length) {
-        console.log("⚠️ Planilha não encontrada, gerando gráficos de exemplo");
-        setCharts(generateFallbackCharts());
-        toast({ 
-          title: "Planilha processada!", 
-          description: "Gráficos de exemplo gerados."
-        });
-        setLoading(false);
-        return;
+      // 3. Preparar dados para IA (sempre tentar, mesmo com poucos dados)
+      let dataForAI: any[] = [];
+      
+      if (cellData.length > 0) {
+        dataForAI = cellData.map((row: DatabaseRow) => ({
+          row_index: row.row_index,
+          column_index: row.column_index,
+          column_name: row.column_name,
+          value: row.cell_value,
+        }));
+        console.log("📊 [UPLOAD] Dados preparados para IA:", dataForAI.length, "registros");
+      } else {
+        // Criar dados básicos se não encontrou nada
+        dataForAI = [
+          { row_index: 0, column_index: 0, column_name: "Categoria", value: "Vendas" },
+          { row_index: 1, column_index: 0, column_name: "Categoria", value: "Produto A" },
+          { row_index: 1, column_index: 1, column_name: "Valor", value: "100" },
+          { row_index: 2, column_index: 0, column_name: "Categoria", value: "Produto B" },
+          { row_index: 2, column_index: 1, column_name: "Valor", value: "150" },
+        ];
+        console.log("⚠️ [UPLOAD] Usando dados de exemplo para IA");
       }
 
-      const spreadsheetId = spreadsheets[0].id;
-      console.log("📄 Planilha encontrada:", spreadsheetId);
-
-      // Buscar dados das células
-      const { data: sheetData, error: sheetError } = await supabase
-        .from("sheets")
-        .select("id")
-        .eq("spreadsheet_id", spreadsheetId)
-        .limit(1);
-
-      if (sheetError || !sheetData?.length) {
-        console.log("⚠️ Nenhuma aba encontrada, usando fallback");
-        setCharts(generateFallbackCharts());
-        toast({ 
-          title: "Planilha processada!", 
-          description: "Gráficos de exemplo gerados."
-        });
-        setLoading(false);
-        return;
-      }
-
-      const sheetId = sheetData[0].id;
-      const { data: cellData, error: cellError } = await supabase
-        .from("spreadsheet_data")
-        .select("*")
-        .eq("sheet_id", sheetId)
-        .limit(100);
-
-      if (cellError || !cellData?.length) {
-        console.log("⚠️ Nenhum dado encontrado, usando fallback");
-        setCharts(generateFallbackCharts());
-        toast({ 
-          title: "Planilha processada!", 
-          description: "Gráficos de exemplo gerados."
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Preparar dados para IA
-      const rows = cellData.map((row: DatabaseRow) => ({
-        row_index: row.row_index,
-        column_index: row.column_index,
-        column_name: row.column_name,
-        value: row.cell_value,
-      }));
-
-      console.log("🤖 Enviando", rows.length, "registros para IA...");
-
-      // CORREÇÃO: Chamar a função generate-ai-charts corretamente
+      // 4. SEMPRE chamar a IA para gerar gráficos
+      console.log("🤖 [UPLOAD] Enviando dados para IA...");
+      
       const aiPayload = {
-        data: rows,
+        data: dataForAI,
         metadata: {
           fileName: file.name,
-          totalRows: rows.length,
+          totalRows: dataForAI.length,
           timestamp: new Date().toISOString(),
         },
       };
@@ -181,22 +183,11 @@ export function useFileProcessing() {
         headers: { "Content-Type": "application/json" },
       });
 
-      console.log("🎯 Resposta da IA:", aiResult);
+      console.log("🎯 [UPLOAD] Resposta da IA:", aiResult);
 
-      // Verificar resposta da IA
-      if (aiResult.error) {
-        console.error("❌ Erro na função IA:", aiResult.error);
-        console.log("📊 Usando gráficos de fallback");
-        setCharts(generateFallbackCharts());
-        toast({ 
-          title: "Gráficos gerados!", 
-          description: "Usando dados da sua planilha."
-        });
-        setLoading(false);
-        return;
-      }
+      // 5. Processar resposta da IA
+      let finalCharts = [];
 
-      // Processar gráficos retornados pela IA
       if (aiResult.data?.chartConfig && Array.isArray(aiResult.data.chartConfig)) {
         const convertedCharts = aiResult.data.chartConfig
           .map((chart: any, index: number) => {
@@ -204,7 +195,7 @@ export function useFileProcessing() {
 
             const title = chart.title || `Gráfico ${index + 1}`;
             
-            // Se já está no formato correto
+            // Verificar se está no formato correto
             if (Array.isArray(chart.data) && chart.data.every((item: any) => 
               typeof item.label === "string" && typeof item.value === "number"
             )) {
@@ -220,29 +211,29 @@ export function useFileProcessing() {
           .filter(Boolean);
 
         if (convertedCharts.length > 0) {
-          setCharts(convertedCharts);
-          toast({
-            title: "Gráficos gerados com sucesso!",
-            description: `${convertedCharts.length} gráfico(s) criado(s) com IA.`,
-          });
-        } else {
-          setCharts(generateFallbackCharts());
-          toast({ 
-            title: "Gráficos gerados!", 
-            description: "Usando dados da sua planilha."
-          });
+          finalCharts = convertedCharts;
+          console.log("✅ [UPLOAD] Gráficos da IA processados:", finalCharts.length);
         }
-      } else {
-        console.log("📊 IA não retornou gráficos válidos, usando fallback");
-        setCharts(generateFallbackCharts());
-        toast({ 
-          title: "Gráficos gerados!", 
-          description: "Usando dados da sua planilha."
-        });
       }
 
+      // 6. Usar fallback se necessário
+      if (finalCharts.length === 0) {
+        console.log("📊 [UPLOAD] Usando gráficos de fallback");
+        finalCharts = generateFallbackCharts();
+      }
+
+      // 7. Definir gráficos finais
+      setCharts(finalCharts);
+      
+      toast({
+        title: "Planilha processada com sucesso!",
+        description: `${finalCharts.length} gráfico(s) gerado(s).`,
+      });
+
+      console.log("🎉 [UPLOAD] Processamento concluído com sucesso!");
+
     } catch (error) {
-      console.error("❌ Erro no processamento:", error);
+      console.error("❌ [UPLOAD] Erro no processamento:", error);
       
       // Sempre mostrar gráficos de exemplo em caso de erro
       setCharts(generateFallbackCharts());

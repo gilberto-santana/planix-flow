@@ -11,7 +11,7 @@ export interface ParseUploadedSheetParams {
 }
 
 export interface ParseUploadedSheetResult {
-  success: boolean;
+  success?: boolean;
   message?: string;
   spreadsheetId?: string;
   totalCells?: number;
@@ -21,7 +21,7 @@ export interface ParseUploadedSheetResult {
 export async function callParseUploadedSheetFunction(
   params: ParseUploadedSheetParams
 ): Promise<{ data: ParseUploadedSheetResult | null; error: string | null }> {
-  console.log("🔄 Chamando Edge Function parse-uploaded-sheet...");
+  console.log("🔄 [EDGE-UTILS] Chamando parse-uploaded-sheet...");
 
   const payload = {
     fileUrl: `https://lferxmdlttvitbuvekps.supabase.co/storage/v1/object/public/spreadsheets/${params.filePath}`,
@@ -32,20 +32,23 @@ export async function callParseUploadedSheetFunction(
     fileType: params.fileType
   };
 
+  console.log("📤 [EDGE-UTILS] Payload:", payload);
+
   try {
     const { data, error } = await supabase.functions.invoke('parse-uploaded-sheet', {
       body: JSON.stringify(payload)
     });
 
+    console.log("📥 [EDGE-UTILS] Resposta recebida:", { data, error });
+
     if (error) {
-      console.error("❌ Erro na Edge Function:", error);
+      console.error("❌ [EDGE-UTILS] Erro na Edge Function:", error);
       return { data: null, error: error.message };
     }
 
-    console.log("✅ Edge Function executada:", data?.success ? "sucesso" : "falhou");
     return { data, error: null };
   } catch (err: any) {
-    console.error("❌ Erro inesperado:", err);
+    console.error("❌ [EDGE-UTILS] Erro inesperado:", err);
     return { data: null, error: err.message || "Erro desconhecido" };
   }
 }

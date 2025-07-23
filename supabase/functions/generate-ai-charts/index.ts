@@ -1,7 +1,6 @@
 
 import "https://deno.land/std@0.203.0/dotenv/load.ts";
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.5";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,6 +16,7 @@ function generateFallbackCharts(data: any[]): any[] {
   console.log("📊 [AI-CHARTS] Gerando gráficos de fallback...");
   
   if (!data || data.length === 0) {
+    console.log("🔄 [AI-CHARTS] Sem dados, retornando exemplo padrão");
     return [{
       title: "Dados de Exemplo",
       type: "bar",
@@ -28,19 +28,38 @@ function generateFallbackCharts(data: any[]): any[] {
     }];
   }
 
-  // Tentar extrair dados reais
+  console.log("🔍 [AI-CHARTS] Analisando dados recebidos:", data.length, "registros");
+
+  // Extrair colunas e valores
   const columns = new Map();
-  data.forEach(row => {
-    if (row.column_name && row.value) {
+  data.forEach((row, index) => {
+    console.log(`📝 [AI-CHARTS] Linha ${index}:`, row);
+    
+    if (row.column_name && row.value !== null && row.value !== undefined) {
       const numValue = parseFloat(String(row.value));
+      
       if (!isNaN(numValue)) {
         if (!columns.has(row.column_name)) {
           columns.set(row.column_name, []);
         }
         columns.get(row.column_name).push({
-          label: `Linha ${row.row_index || 1}`,
+          label: `Linha ${row.row_index || index + 1}`,
           value: Math.abs(numValue)
         });
+      } else {
+        // Para valores não numéricos, criar contadores
+        if (!columns.has('Categorias')) {
+          columns.set('Categorias', []);
+        }
+        const existing = columns.get('Categorias').find((item: any) => item.label === row.value);
+        if (existing) {
+          existing.value += 1;
+        } else {
+          columns.get('Categorias').push({
+            label: String(row.value).slice(0, 20),
+            value: 1
+          });
+        }
       }
     }
   });
@@ -48,27 +67,36 @@ function generateFallbackCharts(data: any[]): any[] {
   const charts = [];
   let chartCount = 0;
 
+  console.log("📊 [AI-CHARTS] Colunas encontradas:", Array.from(columns.keys()));
+
   for (const [columnName, values] of columns) {
     if (chartCount >= 3) break;
     if (values.length > 0) {
       charts.push({
         title: `Análise: ${columnName}`,
         type: "bar",
-        data: values.slice(0, 10)
+        data: values.slice(0, 8) // Limitar para não sobrecarregar
       });
       chartCount++;
+      console.log(`✅ [AI-CHARTS] Gráfico criado: ${columnName} (${values.length} valores)`);
     }
   }
 
-  return charts.length > 0 ? charts : [{
-    title: "Gráfico Exemplo",
-    type: "pie",
-    data: [
-      { label: "Categoria 1", value: 40 },
-      { label: "Categoria 2", value: 35 },
-      { label: "Categoria 3", value: 25 }
-    ]
-  }];
+  if (charts.length === 0) {
+    console.log("🔄 [AI-CHARTS] Nenhum gráfico gerado, usando padrão");
+    return [{
+      title: "Gráfico Exemplo",
+      type: "pie",
+      data: [
+        { label: "Categoria 1", value: 40 },
+        { label: "Categoria 2", value: 35 },
+        { label: "Categoria 3", value: 25 }
+      ]
+    }];
+  }
+
+  console.log("🎯 [AI-CHARTS] Fallback gerado:", charts.length, "gráficos");
+  return charts;
 }
 
 serve(async (req) => {
@@ -126,34 +154,33 @@ serve(async (req) => {
       });
     }
 
-    // Tentar usar Gemini se a chave estiver disponível
+    // SEMPRE tentar usar Gemini primeiro se disponível
     if (geminiApiKey) {
       console.log("🤖 [AI-CHARTS] Tentando usar Gemini...");
       
-      const prompt = `
-Você é um assistente de visualização de dados.
+      try {
+        const prompt = `
+Analise os dados da planilha e gere 2-3 gráficos úteis em JSON.
 
-Analise os dados da planilha e gere até 5 gráficos úteis. Use o melhor tipo de gráfico dependendo dos dados (pie para proporções, bar para comparações).
-
-Retorne APENAS um JSON válido no formato:
-
+Retorne APENAS um array JSON válido no formato:
 [
   {
     "type": "bar",
-    "title": "Título do gráfico",
+    "title": "Nome do gráfico",
     "data": [
-      { "label": "Item A", "value": 123 },
-      { "label": "Item B", "value": 456 }
+      { "label": "Item 1", "value": 100 },
+      { "label": "Item 2", "value": 200 }
     ]
   }
 ]
 
-Dados da planilha:
-${JSON.stringify(data.slice(0, 20), null, 2)}
-`.trim();
+Use "bar" para comparações, "pie" para proporções, "line" para tendências.
 
-      try {
-        console.log("🚀 [AI-CHARTS] Fazendo requisição para Gemini...");
+Dados (primeiros 10 registros):
+${JSON.stringify(data.slice(0, 10), null, 2)}
+        `.trim();
+
+        console.log("🚀 [AI-CHARTS] Enviando para Gemini...");
         const geminiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
           {
@@ -171,21 +198,56 @@ ${JSON.stringify(data.slice(0, 20), null, 2)}
 
           if (textResponse) {
             console.log("✅ [AI-CHARTS] Resposta do Gemini recebida");
+            console.log("📝 [AI-CHARTS] Resposta bruta:", textResponse.slice(0, 200) + "...");
+            
             try {
-              const aiCharts = JSON.parse(textResponse);
+              // Tentar extrair JSON da resposta
+              let jsonStr = textResponse.trim();
+              
+              // Remover markdown se presente
+              if (jsonStr.startsWith('```json')) {
+                jsonStr = jsonStr.replace(/```json\n?/, '').replace(/\n?```$/, '');
+              } else if (jsonStr.startsWith('```')) {
+                jsonStr = jsonStr.replace(/```\n?/, '').replace(/\n?```$/, '');
+              }
+              
+              const aiCharts = JSON.parse(jsonStr);
+              
               if (Array.isArray(aiCharts) && aiCharts.length > 0) {
-                console.log("🎯 [AI-CHARTS] Gráficos da IA gerados:", aiCharts.length);
-                return new Response(JSON.stringify({
-                  success: true,
-                  source: "gemini",
-                  chartConfig: aiCharts
-                }), {
-                  headers: { ...corsHeaders, "Content-Type": "application/json" }
-                });
+                // Validar estrutura dos gráficos
+                const validCharts = aiCharts.filter(chart => 
+                  chart && 
+                  chart.title && 
+                  chart.data && 
+                  Array.isArray(chart.data) &&
+                  chart.data.length > 0 &&
+                  chart.data.every((item: any) => 
+                    item.label && 
+                    typeof item.value === 'number'
+                  )
+                );
+                
+                if (validCharts.length > 0) {
+                  console.log("🎯 [AI-CHARTS] Gráficos da IA validados:", validCharts.length);
+                  return new Response(JSON.stringify({
+                    success: true,
+                    source: "gemini",
+                    chartConfig: validCharts
+                  }), {
+                    headers: { ...corsHeaders, "Content-Type": "application/json" }
+                  });
+                } else {
+                  console.log("⚠️ [AI-CHARTS] Gráficos da IA inválidos");
+                }
+              } else {
+                console.log("⚠️ [AI-CHARTS] Resposta da IA não é array válido");
               }
             } catch (jsonError) {
               console.error("❌ [AI-CHARTS] Erro ao parsear resposta da IA:", jsonError);
+              console.log("📝 [AI-CHARTS] Texto que falhou:", textResponse.slice(0, 500));
             }
+          } else {
+            console.log("⚠️ [AI-CHARTS] Gemini não retornou texto");
           }
         } else {
           console.error("❌ [AI-CHARTS] Gemini retornou erro:", geminiResponse.status);
@@ -197,7 +259,7 @@ ${JSON.stringify(data.slice(0, 20), null, 2)}
       console.log("⚠️ [AI-CHARTS] Chave Gemini não configurada");
     }
 
-    // Fallback com dados reais
+    // Fallback com dados reais SEMPRE funciona
     console.log("📊 [AI-CHARTS] Usando fallback com dados reais");
     const fallbackCharts = generateFallbackCharts(data);
     
