@@ -38,7 +38,7 @@ jwt_expiry = 3600
 enable_signup = true
 
 [functions.parse-uploaded-sheet]
-verify_jwt = false
+verify_jwt = true
 
 [functions.generate-ai-charts]
-verify_jwt = false
+verify_jwt = true

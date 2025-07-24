@@ -4,10 +4,31 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.5';
 import * as xlsx from 'https://esm.sh/xlsx@0.18.5';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://planix-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Rate limiting - simple in-memory store
+const requestCounts = new Map();
+const RATE_LIMIT = 10; // requests per minute
+const RATE_WINDOW = 60000; // 1 minute in ms
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const userRequests = requestCounts.get(userId) || [];
+  
+  // Remove old requests outside the window
+  const recentRequests = userRequests.filter((time: number) => now - time < RATE_WINDOW);
+  
+  if (recentRequests.length >= RATE_LIMIT) {
+    return false;
+  }
+  
+  recentRequests.push(now);
+  requestCounts.set(userId, recentRequests);
+  return true;
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -20,10 +41,37 @@ serve(async (req) => {
   let spreadsheetId: string | null = null;
 
   try {
-    console.log('🚀 [PARSE] Iniciando processamento da planilha...');
+    // Get JWT token from Authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+    
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Verify JWT and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      throw new Error('Invalid or expired token');
+    }
+    
+    console.log('🚀 [PARSE] Requisição autenticada de usuário:', user.id);
+    
+    // Check rate limit
+    if (!checkRateLimit(user.id)) {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
     
     const body = await req.json();
     const { fileUrl, userId, fileName, filePath, fileSize, fileType } = body;
+    
+    // Validate user ownership
+    if (userId !== user.id) {
+      throw new Error('User ID mismatch');
+    }
 
     if (!fileUrl || !userId || !fileName || !filePath || !fileSize || !fileType) {
       console.error('❌ [PARSE] Campos obrigatórios ausentes');

@@ -1,12 +1,34 @@
 
 import "https://deno.land/std@0.203.0/dotenv/load.ts";
 import { serve } from "https://deno.land/std@0.192.0/http/server.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.5';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://planix-flow.lovable.app',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+// Rate limiting - simple in-memory store
+const requestCounts = new Map();
+const RATE_LIMIT = 5; // requests per minute for AI generation
+const RATE_WINDOW = 60000; // 1 minute in ms
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const userRequests = requestCounts.get(userId) || [];
+  
+  // Remove old requests outside the window
+  const recentRequests = userRequests.filter((time: number) => now - time < RATE_WINDOW);
+  
+  if (recentRequests.length >= RATE_LIMIT) {
+    return false;
+  }
+  
+  recentRequests.push(now);
+  requestCounts.set(userId, recentRequests);
+  return true;
+}
 
 const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
@@ -108,6 +130,32 @@ serve(async (req) => {
   }
 
   try {
+    // Get JWT token from Authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+    
+    const token = authHeader.replace('Bearer ', '');
+    const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = Deno.env.toObject();
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    
+    // Verify JWT and get user
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      throw new Error('Invalid or expired token');
+    }
+    
+    console.log("🤖 [AI-CHARTS] Requisição autenticada de usuário:", user.id);
+    
+    // Check rate limit
+    if (!checkRateLimit(user.id)) {
+      return new Response(JSON.stringify({ error: 'Rate limit exceeded' }), {
+        status: 429,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+    
     console.log("📝 [AI-CHARTS] Lendo body da requisição...");
     const body = await req.text();
     
