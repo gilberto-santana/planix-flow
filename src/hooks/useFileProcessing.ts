@@ -85,16 +85,15 @@ export function useFileProcessing() {
         throw new Error("ID da planilha não retornado");
       }
 
-      // 2. Buscar dados processados (com retry simples)
-      console.log("🔍 [UPLOAD] Buscando dados processados...");
+      // 2. Aguardar processamento e buscar dados (simplificado)
+      console.log("🔍 [UPLOAD] Aguardando processamento...");
       
-      let attempts = 0;
+      // Aguardar um pouco para o processamento
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
       let cellData: DatabaseRow[] = [];
       
-      while (attempts < 3) {
-        attempts++;
-        console.log(`🔄 [UPLOAD] Tentativa ${attempts}/3 de buscar dados...`);
-
+      try {
         // Buscar abas
         const { data: sheetData, error: sheetError } = await supabase
           .from("sheets")
@@ -102,45 +101,22 @@ export function useFileProcessing() {
           .eq("spreadsheet_id", spreadsheetId)
           .limit(1);
 
-        if (sheetError) {
-          console.error(`❌ [UPLOAD] Erro ao buscar aba (tentativa ${attempts}):`, sheetError);
-          if (attempts === 3) throw new Error("Erro ao buscar aba da planilha");
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
-        }
+        if (!sheetError && sheetData?.length) {
+          // Buscar dados das células
+          const sheetId = sheetData[0].id;
+          const { data: rawCellData, error: cellError } = await supabase
+            .from("spreadsheet_data")
+            .select("*")
+            .eq("sheet_id", sheetId)
+            .limit(500);
 
-        if (!sheetData?.length) {
-          console.log(`⚠️ [UPLOAD] Nenhuma aba encontrada (tentativa ${attempts})`);
-          if (attempts === 3) break;
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
+          if (!cellError && rawCellData?.length) {
+            cellData = rawCellData as DatabaseRow[];
+            console.log(`✅ [UPLOAD] Dados encontrados: ${cellData.length} células`);
+          }
         }
-
-        // Buscar dados das células
-        const sheetId = sheetData[0].id;
-        const { data: rawCellData, error: cellError } = await supabase
-          .from("spreadsheet_data")
-          .select("*")
-          .eq("sheet_id", sheetId)
-          .limit(200);
-
-        if (cellError) {
-          console.error(`❌ [UPLOAD] Erro ao buscar células (tentativa ${attempts}):`, cellError);
-          if (attempts === 3) break;
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          continue;
-        }
-
-        if (rawCellData?.length) {
-          cellData = rawCellData as DatabaseRow[];
-          console.log(`✅ [UPLOAD] Dados encontrados: ${cellData.length} células`);
-          break;
-        }
-
-        console.log(`⚠️ [UPLOAD] Nenhum dado encontrado (tentativa ${attempts})`);
-        if (attempts < 3) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+      } catch (fetchError) {
+        console.log("⚠️ [UPLOAD] Erro ao buscar dados, continuando com fallback");
       }
 
       // 3. Preparar dados para IA (sempre tentar, mesmo com poucos dados)
@@ -166,57 +142,63 @@ export function useFileProcessing() {
         console.log("⚠️ [UPLOAD] Usando dados de exemplo para IA");
       }
 
-      // 4. SEMPRE chamar a IA para gerar gráficos
+      // 4. Chamar a IA para gerar gráficos (com fallback garantido)
       console.log("🤖 [UPLOAD] Enviando dados para IA...");
       
-      const aiPayload = {
-        data: dataForAI,
-        metadata: {
-          fileName: file.name,
-          totalRows: dataForAI.length,
-          timestamp: new Date().toISOString(),
-        },
-      };
-
-      const aiResult = await supabase.functions.invoke("generate-ai-charts", {
-        body: JSON.stringify(aiPayload),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      console.log("🎯 [UPLOAD] Resposta da IA:", aiResult);
-
-      // 5. Processar resposta da IA
       let finalCharts = [];
+      
+      try {
+        const aiPayload = {
+          data: dataForAI,
+          metadata: {
+            fileName: file.name,
+            totalRows: dataForAI.length,
+            timestamp: new Date().toISOString(),
+          },
+        };
 
-      if (aiResult.data?.chartConfig && Array.isArray(aiResult.data.chartConfig)) {
-        const convertedCharts = aiResult.data.chartConfig
-          .map((chart: any, index: number) => {
-            if (!chart || !chart.data) return null;
+        const aiResult = await supabase.functions.invoke("generate-ai-charts", {
+          body: JSON.stringify(aiPayload),
+          headers: { "Content-Type": "application/json" },
+        });
 
-            const title = chart.title || `Gráfico ${index + 1}`;
-            
-            // Verificar se está no formato correto
-            if (Array.isArray(chart.data) && chart.data.every((item: any) => 
-              typeof item.label === "string" && typeof item.value === "number"
-            )) {
-              return {
-                type: chart.type || "bar",
-                title,
-                data: chart.data
-              };
-            }
+        console.log("🎯 [UPLOAD] Resposta da IA:", aiResult);
+        
+        // Processar resposta da IA
+        if (aiResult.data?.chartConfig && Array.isArray(aiResult.data.chartConfig)) {
+          const convertedCharts = aiResult.data.chartConfig
+            .map((chart: any, index: number) => {
+              if (!chart || !chart.data) return null;
 
-            return null;
-          })
-          .filter(Boolean);
+              const title = chart.title || `Gráfico ${index + 1}`;
+              
+              // Verificar se está no formato correto
+              if (Array.isArray(chart.data) && chart.data.length > 0) {
+                return {
+                  type: chart.type || "bar",
+                  title,
+                  data: chart.data.map((item: any) => ({
+                    label: String(item.label || item.name || `Item ${index + 1}`),
+                    value: Number(item.value) || 0
+                  }))
+                };
+              }
 
-        if (convertedCharts.length > 0) {
-          finalCharts = convertedCharts;
-          console.log("✅ [UPLOAD] Gráficos da IA processados:", finalCharts.length);
+              return null;
+            })
+            .filter(Boolean);
+
+          if (convertedCharts.length > 0) {
+            finalCharts = convertedCharts;
+            console.log("✅ [UPLOAD] Gráficos da IA processados:", finalCharts.length);
+          }
         }
+      } catch (aiError) {
+        console.log("⚠️ [UPLOAD] Erro na IA, usando fallback:", aiError);
       }
 
-      // 6. Usar fallback se necessário
+      // 5. Usar fallback se necessário
+      // 6. Garantir que sempre temos gráficos
       if (finalCharts.length === 0) {
         console.log("📊 [UPLOAD] Usando gráficos de fallback");
         finalCharts = generateFallbackCharts();

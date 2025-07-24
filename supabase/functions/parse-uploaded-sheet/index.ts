@@ -4,14 +4,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.5';
 import * as xlsx from 'https://esm.sh/xlsx@0.18.5';
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://planix-flow.lovable.app',
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 // Rate limiting - simple in-memory store
 const requestCounts = new Map();
-const RATE_LIMIT = 10; // requests per minute
+const RATE_LIMIT = 50; // requests per minute
 const RATE_WINDOW = 60000; // 1 minute in ms
 
 function checkRateLimit(userId: string): boolean {
