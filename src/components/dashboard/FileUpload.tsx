@@ -75,9 +75,23 @@ const FileUpload = () => {
       <Button
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading || loading}
+        className="min-w-[200px]"
       >
-        {uploading ? "Enviando..." : loading ? "Processando..." : "Selecionar Planilha"}
+        {uploading || loading ? (
+          <>
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+            {uploading ? "Fazendo upload..." : loading ? "Gerando gráficos..." : "Processando..."}
+          </>
+        ) : (
+          "Escolher arquivo"
+        )}
       </Button>
+      
+      {(uploading || loading) && (
+        <div className="text-sm text-muted-foreground mt-2">
+          {uploading ? "Enviando arquivo..." : "Analisando dados e criando visualizações..."}
+        </div>
+      )}
 
       {fileName && <span className="text-sm text-muted-foreground">📄 {fileName}</span>}
     </div>
