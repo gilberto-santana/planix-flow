@@ -181,3 +181,15 @@ To run from source:
 # Go >= 1.22
 go run . help
 ```
+
+
+## Environment variables
+
+Configure the Supabase client by defining the following variables in a `.env` file in the project root. Vite automatically loads variables prefixed with `VITE_`:
+
+```bash
+VITE_SUPABASE_URL=<https://your-project.supabase.co>
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+Restart the development server after editing the file so the new variables are picked up.
